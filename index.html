@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nail Player</title>
+<style>
+body{margin:0;background:#111;color:#eee;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+header{padding:10px 16px;background:#1d1d2d;display:flex;gap:8px;align-items:center}
+main{display:flex;height:calc(100vh - 52px)}
+#left{flex:7;background:#000;display:flex;justify-content:center;align-items:center}
+#right{flex:3;overflow:auto;background:#1a1a2a}
+video{width:100%;height:100%;object-fit:contain}
+.item{padding:10px;border-bottom:1px solid #333;cursor:pointer}
+.item.active{background:#fb729933}
+@media(max-width:900px){main{flex-direction:column}#left{height:45vh}#right{flex:1}}
+</style>
+</head>
+<body>
+<header>
+<button onclick="videoInput.click()">打开视频</button>
+<button onclick="subInput.click()">打开字幕</button>
+</header>
+<main>
+<div id="left"><video id="v" controls playsinline></video></div>
+<div id="right" id="list"></div>
+</main>
+<input id="videoInput" type="file" accept="video/*" hidden>
+<input id="subInput" type="file" accept=".srt,.vtt,.txt" hidden>
+<script>
+const v=document.getElementById('v');
+const list=document.getElementById('right');
+let url=null,subs=[],active=-1,seeking=false;
+videoInput.onchange=e=>{
+ if(url) URL.revokeObjectURL(url);
+ url=URL.createObjectURL(e.target.files[0]);
+ v.src=url;
+}
+function pt(t){let m=t.match(/(\d+):(\d+):(\d+)[,.](\d+)/);return (+m[1])*3600+(+m[2])*60+(+m[3])+(+m[4])/1000;}
+subInput.onchange=e=>{
+ const r=new FileReader();
+ r.onload=()=>{
+  subs=[];list.innerHTML="";
+  let blocks=r.result.split(/\n\s*\n/);
+  blocks.forEach(b=>{
+   let l=b.trim().split(/\r?\n/);
+   let tl=l.find(x=>x.includes("-->")); if(!tl)return;
+   let m=tl.match(/(.+?)\s*-->\s*(.+)/); if(!m)return;
+   let txt=l.slice(l.indexOf(tl)+1).join(" ");
+   subs.push({s:pt(m[1]),e:pt(m[2]),t:txt});
+  });
+  subs.forEach((s,i)=>{
+    let d=document.createElement("div");
+    d.className="item";d.textContent=s.t;
+    d.onclick=()=>{
+      if(seeking)return;
+      seeking=true;
+      v.pause();
+      v.currentTime=Math.max(0,s.s-0.05);
+      v.addEventListener("seeked",()=>{seeking=false;v.play().catch(()=>{});},{once:true});
+    };
+    s.el=d;list.appendChild(d);
+  });
+ };
+ r.readAsText(e.target.files[0],"utf-8");
+}
+v.addEventListener("timeupdate",()=>{
+ let t=v.currentTime;
+ let lo=0,hi=subs.length-1,idx=-1;
+ while(lo<=hi){let mid=(lo+hi)>>1;if(subs[mid].s<=t){idx=mid;lo=mid+1}else hi=mid-1;}
+ if(idx!==active&&idx>=0){
+   if(active>=0)subs[active].el.classList.remove("active");
+   subs[idx].el.classList.add("active");
+   subs[idx].el.scrollIntoView({block:"nearest"});
+   active=idx;
+ }
+});
+</script>
+</body></html>
