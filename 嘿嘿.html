@@ -165,8 +165,7 @@
         let currentActiveIndex = -1;
         let lastActiveIndex = -1; 
         let searchQuery = '';
-        let currentVideoName = ''; 
-        let isWaitingForPad = false; // 是否正在等待 iPad 缓冲完毕
+        let isWaitingForPad = false; 
 
         // 工具函数
         function formatTimeShort(seconds) {
@@ -262,18 +261,16 @@
             lastActiveIndex = currentActiveIndex;
         }
 
-        // 【针对大文件优化】温柔缓冲等待机制
+        // 跳转逻辑：保持最稳妥的先刹车再跳转
         function seekToSubtitle(index) {
             if (index < 0 || index >= subtitles.length) return;
             
-            // 如果上一次点击还在拼命缓冲中，允许用户换点别的字幕，但先拦截多余的操作
             const video = document.getElementById('localVideo');
             const seekTime = Math.max(0, subtitles[index].start - 0.1);
 
             currentActiveIndex = index;
             updateSubtitleHighlight();
 
-            // 核心安全：跳转前强制彻底刹车暂停，减少 iPad 边解密边跳转的计算压力
             if (!video.paused) {
                 video.pause();
             }
@@ -281,14 +278,11 @@
             isWaitingForPad = true;
             video.currentTime = seekTime;
 
-            // 监听 seeked（寻道完成）和 canplay（可以播放），双重保障
             const onReadyToPlay = () => {
-                // 给 iPad 留 100ms 的最后视觉渲染缓冲时间，然后静默播放
                 setTimeout(() => {
                     video.play().catch(() => {});
                     isWaitingForPad = false;
                 }, 100);
-                
                 video.removeEventListener('seeked', onReadyToPlay);
                 video.removeEventListener('canplay', onReadyToPlay);
             };
@@ -297,24 +291,14 @@
             video.addEventListener('canplay', onReadyToPlay);
         }
 
+        // 彻底删除了任何读写 localStorage 的代码
         function loadLocalVideo(file) {
             const video = document.getElementById('localVideo');
             const placeholder = document.getElementById('videoPlaceholder');
             
-            currentVideoName = (file && file.name) ? file.name : 'ipad_local_video'; 
             video.src = URL.createObjectURL(file);
             video.style.display = 'block';
             placeholder.style.display = 'none';
-
-            const savedTime = localStorage.getItem('nail_history_' + currentVideoName);
-            if (savedTime) {
-                const targetTime = parseFloat(savedTime);
-                const onLoadedMetadata = () => {
-                    video.currentTime = targetTime;
-                    video.removeEventListener('loadedmetadata', onLoadedMetadata);
-                };
-                video.addEventListener('loadedmetadata', onLoadedMetadata);
-            }
         }
 
         // 事件监听
@@ -351,18 +335,10 @@
             applySearchFilter();
         });
 
-        let lastSavedTime = 0;
         document.getElementById('localVideo').addEventListener('timeupdate', () => {
-            // 如果正在等待 iPad 跳转缓冲，暂时停止时间轴自动更新，防止进度条乱跳
             if (isWaitingForPad) return;
-
             const video = document.getElementById('localVideo');
             const ct = video.currentTime;
-
-            if (currentVideoName && Math.abs(ct - lastSavedTime) > 1) {
-                localStorage.setItem('nail_history_' + currentVideoName, ct.toString());
-                lastSavedTime = ct;
-            }
 
             for (let i = subtitles.length - 1; i >= 0; i--) {
                 if (ct >= subtitles[i].start && ct <= subtitles[i].end) {
