@@ -163,8 +163,10 @@
   <script>
         let subtitles = [];
         let currentActiveIndex = -1;
-        let lastActiveIndex = -1; // 【新增】用于记录上一次高亮的索引
+        let lastActiveIndex = -1; 
         let searchQuery = '';
+        let currentVideoName = ''; 
+        let isWaitingForPad = false; // 是否正在等待 iPad 缓冲完毕
 
         // 工具函数
         function formatTimeShort(seconds) {
@@ -215,16 +217,15 @@
             return result;
         }
 
-        // 【已修改】初始化时重置 lastActiveIndex
         function loadSubtitles(arr) {
             subtitles = arr.map((item, idx) => ({ id: idx, start: item.start, end: item.end, text: item.text, element: null }));
             lastActiveIndex = -1; 
             currentActiveIndex = -1;
+            isWaitingForPad = false;
             renderSubtitleList();
             updateSubtitleHighlight();
         }
 
-        // 【已修改】原渲染保持一致
         function renderSubtitleList() {
             const subtitleList = document.getElementById('subtitleList');
             subtitleList.innerHTML = '';
@@ -249,61 +250,84 @@
             });
         }
 
-        // 【已大幅优化】不再用 forEach 遍历几千个节点，每次只精准修改 2 个节点的样式
         function updateSubtitleHighlight() {
-            // 1. 移除上一次高亮节点的样式
             if (lastActiveIndex !== -1 && subtitles[lastActiveIndex] && subtitles[lastActiveIndex].element) {
                 subtitles[lastActiveIndex].element.classList.remove('active');
             }
-            
-            // 2. 为当前节点添加高亮，并让侧边栏滚动条自动跟踪
             if (currentActiveIndex !== -1 && subtitles[currentActiveIndex] && subtitles[currentActiveIndex].element) {
                 const activeEl = subtitles[currentActiveIndex].element;
                 activeEl.classList.add('active');
-                
-                // 自动平滑滚动到视野内，避免跳转后找不到当前字幕
                 activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }
-            
-            // 3. 记录最新索引
             lastActiveIndex = currentActiveIndex;
         }
 
-        // 【已修改】加入延迟播放，防止 iPad WebKit 引擎死锁卡死
+        // 【针对大文件优化】温柔缓冲等待机制
         function seekToSubtitle(index) {
             if (index < 0 || index >= subtitles.length) return;
+            
+            // 如果上一次点击还在拼命缓冲中，允许用户换点别的字幕，但先拦截多余的操作
+            const video = document.getElementById('localVideo');
             const seekTime = Math.max(0, subtitles[index].start - 0.1);
+
             currentActiveIndex = index;
             updateSubtitleHighlight();
-            const video = document.getElementById('localVideo');
+
+            // 核心安全：跳转前强制彻底刹车暂停，减少 iPad 边解密边跳转的计算压力
+            if (!video.paused) {
+                video.pause();
+            }
+
+            isWaitingForPad = true;
             video.currentTime = seekTime;
-            
-            // 核心修复：通过 50ms 的延迟错开 play() 的时机
-            setTimeout(() => {
-                video.play().catch(() => {});
-            }, 50);
+
+            // 监听 seeked（寻道完成）和 canplay（可以播放），双重保障
+            const onReadyToPlay = () => {
+                // 给 iPad 留 100ms 的最后视觉渲染缓冲时间，然后静默播放
+                setTimeout(() => {
+                    video.play().catch(() => {});
+                    isWaitingForPad = false;
+                }, 100);
+                
+                video.removeEventListener('seeked', onReadyToPlay);
+                video.removeEventListener('canplay', onReadyToPlay);
+            };
+
+            video.addEventListener('seeked', onReadyToPlay);
+            video.addEventListener('canplay', onReadyToPlay);
         }
 
-        // 加载本地视频
         function loadLocalVideo(file) {
             const video = document.getElementById('localVideo');
             const placeholder = document.getElementById('videoPlaceholder');
+            
+            currentVideoName = (file && file.name) ? file.name : 'ipad_local_video'; 
             video.src = URL.createObjectURL(file);
             video.style.display = 'block';
             placeholder.style.display = 'none';
+
+            const savedTime = localStorage.getItem('nail_history_' + currentVideoName);
+            if (savedTime) {
+                const targetTime = parseFloat(savedTime);
+                const onLoadedMetadata = () => {
+                    video.currentTime = targetTime;
+                    video.removeEventListener('loadedmetadata', onLoadedMetadata);
+                };
+                video.addEventListener('loadedmetadata', onLoadedMetadata);
+            }
         }
 
         // 事件监听
         document.getElementById('btnLoadVideo').addEventListener('click', () => document.getElementById('videoFileInput').click());
         document.getElementById('videoFileInput').addEventListener('change', (e) => {
-            if (e.target.files[0]) loadLocalVideo(e.target.files[0]);
+            if (e.target.files && e.target.files[0]) loadLocalVideo(e.target.files[0]);
             e.target.value = '';
         });
 
         document.getElementById('btnLoadSubtitle').addEventListener('click', () => document.getElementById('subtitleFileInput').click());
         document.getElementById('subtitleFileInput').addEventListener('change', (e) => {
+            if (!e.target.files || !e.target.files[0]) return;
             const file = e.target.files[0];
-            if (!file) return;
             const reader = new FileReader();
             reader.onload = (ev) => {
                 const parsed = parseSubtitles(ev.target.result);
@@ -317,7 +341,7 @@
         document.getElementById('btnClearSubtitle').addEventListener('click', () => {
             subtitles = [];
             currentActiveIndex = -1;
-            lastActiveIndex = -1; // 清空时同步重置
+            lastActiveIndex = -1;
             renderSubtitleList();
             updateSubtitleHighlight();
         });
@@ -327,9 +351,19 @@
             applySearchFilter();
         });
 
-        // 视频时间更新 → 自动高亮当前字幕（同样用到了优化后的高效高亮函数）
+        let lastSavedTime = 0;
         document.getElementById('localVideo').addEventListener('timeupdate', () => {
-            const ct = document.getElementById('localVideo').currentTime;
+            // 如果正在等待 iPad 跳转缓冲，暂时停止时间轴自动更新，防止进度条乱跳
+            if (isWaitingForPad) return;
+
+            const video = document.getElementById('localVideo');
+            const ct = video.currentTime;
+
+            if (currentVideoName && Math.abs(ct - lastSavedTime) > 1) {
+                localStorage.setItem('nail_history_' + currentVideoName, ct.toString());
+                lastSavedTime = ct;
+            }
+
             for (let i = subtitles.length - 1; i >= 0; i--) {
                 if (ct >= subtitles[i].start && ct <= subtitles[i].end) {
                     if (currentActiveIndex !== i) { 
