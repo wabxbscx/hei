@@ -1,0 +1,491 @@
+!DOCTYPE html
+html lang=zh-CN
+head
+    meta charset=UTF-8
+    meta name=viewport content=width=device-width, initial-scale=1.0
+    titlenailtitle
+    style
+        root {
+            --bg #0f0f1a;
+            --surface #1a1a2e;
+            --surface-light #222240;
+            --accent #fb7299;
+            --accent-glow #fb729955;
+            --text #e0e0e0;
+            --text-secondary #999;
+            --text-muted #666;
+            --border #2a2a45;
+            --danger #ff6b6b;
+            --success #51cf66;
+            --radius 12px;
+            --radius-sm 8px;
+            --transition 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+         { margin 0; padding 0; box-sizing border-box; }
+
+        body {
+            font-family -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background var(--bg);
+            color var(--text);
+            height 100vh;
+            overflow hidden;
+            user-select none;
+            -webkit-user-select none;
+            -webkit-tap-highlight-color transparent;
+        }
+
+        .app-container {
+            display flex;
+            flex-direction column;
+            height 100vh;
+            max-width 1600px;
+            margin 0 auto;
+        }
+
+        .header {
+            display flex;
+            align-items center;
+            justify-content space-between;
+            padding 12px 20px;
+            background var(--surface);
+            border-bottom 1px solid var(--border);
+            flex-shrink 0;
+            gap 12px;
+            flex-wrap wrap;
+        }
+        .header-brand {
+            display flex;
+            align-items center;
+            gap 10px;
+            font-size 1.15rem;
+            font-weight 700;
+            color var(--accent);
+        }
+        .header-brand .icon {
+            width 34px;
+            height 34px;
+            border-radius 8px;
+            background var(--accent);
+            display flex;
+            align-items center;
+            justify-content center;
+            font-size 1.2rem;
+            color #fff;
+        }
+        .header-actions {
+            display flex;
+            gap 8px;
+            flex-wrap wrap;
+            align-items center;
+        }
+
+        .btn {
+            display inline-flex;
+            align-items center;
+            gap 6px;
+            padding 9px 16px;
+            border-radius var(--radius-sm);
+            border 1px solid var(--border);
+            background var(--surface-light);
+            color var(--text);
+            cursor pointer;
+            font-size 0.9rem;
+            font-weight 500;
+            white-space nowrap;
+            transition all var(--transition);
+            outline none;
+            font-family inherit;
+        }
+        .btnhover { background #2e2e4a; border-color #444; }
+        .btnactive { transform scale(0.97); transition 0.08s; }
+        .btn-accent { background var(--accent); border-color var(--accent); color #fff; font-weight 600; }
+        .btn-accenthover { background #ff8aaf; box-shadow 0 4px 20px var(--accent-glow); }
+        .btn-sm { padding 6px 12px; font-size 0.8rem; border-radius 6px; }
+        .btn-ghost { background transparent; border-color transparent; color var(--text-secondary); }
+        .btn-danger { border-color var(--danger); color var(--danger); background #ff6b6b10; }
+        .btn-dangerhover { background #ff6b6b30; border-color #ff6b6b; color #fff; }
+
+        .main-content {
+            display flex;
+            flex 1;
+            overflow hidden;
+        }
+
+        .video-section {
+            flex 7;
+            display flex;
+            flex-direction column;
+            background #000;
+            position relative;
+            border-right 1px solid var(--border);
+        }
+        .video-container {
+            flex 1;
+            display flex;
+            align-items center;
+            justify-content center;
+            background #000;
+            overflow hidden;
+        }
+        .video-container video {
+            width 100%;
+            height 100%;
+            object-fit contain;
+        }
+        .video-placeholder {
+            display flex;
+            flex-direction column;
+            align-items center;
+            justify-content center;
+            gap 16px;
+            color var(--text-muted);
+            text-align center;
+            padding 40px;
+        }
+        .video-placeholder .placeholder-icon {
+            font-size 4rem;
+            opacity 0.5;
+            animation float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform translateY(0); }
+            50% { transform translateY(-15px); }
+        }
+
+        .subtitle-section {
+            flex 3;
+            display flex;
+            flex-direction column;
+            background var(--surface);
+            min-width 300px;
+            max-width 460px;
+            overflow hidden;
+        }
+        .subtitle-header {
+            padding 14px 16px;
+            border-bottom 1px solid var(--border);
+            flex-shrink 0;
+        }
+        .subtitle-header input {
+            width 100%;
+            padding 10px 14px;
+            border-radius var(--radius-sm);
+            border 1px solid var(--border);
+            background var(--surface-light);
+            color var(--text);
+            font-size 0.85rem;
+            outline none;
+            font-family inherit;
+        }
+        .subtitle-list {
+            flex 1;
+            overflow-y auto;
+            padding 8px 10px;
+            scroll-behavior smooth;
+        }
+        .subtitle-list-webkit-scrollbar { width 4px; }
+        .subtitle-list-webkit-scrollbar-track { background transparent; }
+        .subtitle-list-webkit-scrollbar-thumb { background var(--border); border-radius 10px; }
+
+        .subtitle-item {
+            display flex;
+            align-items flex-start;
+            gap 10px;
+            padding 10px 12px;
+            margin 3px 4px;
+            border-radius var(--radius-sm);
+            cursor pointer;
+            transition all var(--transition);
+            border 1.5px solid transparent;
+            scroll-margin 60px;
+        }
+        .subtitle-itemhover { background var(--surface-light); border-color #ffffff15; }
+        .subtitle-item.active {
+            background #fb729918;
+            border-color var(--accent);
+            box-shadow 0 0 20px var(--accent-glow);
+        }
+        .subtitle-item .time-badge {
+            flex-shrink 0;
+            font-size 0.7rem;
+            font-weight 600;
+            color var(--accent);
+            background #fb729915;
+            padding 4px 8px;
+            border-radius 4px;
+            font-family 'SF Mono', monospace;
+            min-width 60px;
+            text-align center;
+        }
+        .subtitle-item.active .time-badge { background var(--accent); color #fff; }
+        .subtitle-item .text {
+            flex 1;
+            font-size 0.85rem;
+            line-height 1.5;
+            word-break break-word;
+        }
+        .subtitle-item.active .text { color #fff; font-weight 500; }
+        .hidden { display none !important; }
+
+        .toast {
+            position fixed;
+            bottom 20px;
+            left 50%;
+            transform translateX(-50%);
+            padding 8px 20px;
+            border-radius 20px;
+            background #333;
+            color #fff;
+            font-size 0.85rem;
+            z-index 999;
+            pointer-events none;
+        }
+
+        @media (max-width 900px) {
+            .main-content { flex-direction column; }
+            .video-section { flex none; height 45vh; border-right none; border-bottom 1px solid var(--border); }
+            .subtitle-section { flex 1; max-width none; min-width auto; }
+        }
+    style
+head
+body
+
+div class=app-container
+    div class=header
+        div class=header-brand
+            div class=icon▶div
+            spannailspan
+        div
+        div class=header-actions
+            button class=btn btn-accent id=btnLoadVideo📹 打开视频button
+            button class=btn id=btnLoadSubtitle📝 导入字幕button
+            button class=btn btn-ghost id=btnClearSubtitle🗑️ 清除字幕button
+        div
+    div
+
+    div class=main-content
+        div class=video-section
+            div class=video-container id=videoContainer
+                div class=video-placeholder id=videoPlaceholder
+                    div class=placeholder-icon🎬div
+                    p点击「打开视频」选择本地文件p
+                div
+                video id=localVideo style=displaynone; controls playsinlinevideo
+            div
+        div
+
+        div class=subtitle-section
+            div class=subtitle-header
+                input type=text id=subtitleSearch placeholder=🔍 搜索字幕... oninput=filterSubtitles()
+            div
+            div class=subtitle-list id=subtitleList
+                div style=text-aligncenter;color#555;padding40px;暂无字幕div
+            div
+        div
+    div
+div
+
+input type=file id=videoFileInput accept=video style=displaynone;
+input type=file id=subtitleFileInput accept=.srt,.vtt,.txt style=displaynone;
+
+script
+    const video = document.getElementById('localVideo');
+    const videoPlaceholder = document.getElementById('videoPlaceholder');
+    const subtitleList = document.getElementById('subtitleList');
+
+    let subtitles = [];
+    let currentFile = null;
+    let saveTimer = null;
+
+     ========== 工具函数 ==========
+    function formatTime(seconds) {
+        const m = Math.floor(seconds  60);
+        const s = Math.floor(seconds % 60);
+        return `${String(m).padStart(2, '0')}${String(s).padStart(2, '0')}`;
+    }
+
+    function toast(msg) {
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() = t.remove(), 2000);
+    }
+
+     ========== 记忆功能 ==========
+    function saveProgress() {
+        if (!currentFile) return;
+        const data = {
+            fileName currentFile.name,
+            fileSize currentFile.size,
+            currentTime video.currentTime,
+            subtitles subtitles.map(s = ({ start s.start, end s.end, text s.text }))
+        };
+        localStorage.setItem('nail_progress', JSON.stringify(data));
+    }
+
+    function loadProgress(file) {
+        const raw = localStorage.getItem('nail_progress');
+        if (!raw) return;
+        try {
+            const data = JSON.parse(raw);
+            if (data.fileName === file.name && data.fileSize === file.size) {
+                video.currentTime = data.currentTime  0;
+                if (data.subtitles && data.subtitles.length  0) {
+                    subtitles = data.subtitles.map((s, idx) = ({ ...s, id idx }));
+                    renderSubtitles();
+                }
+                toast(`已恢复上次进度 ${formatTime(data.currentTime)}`);
+            }
+        } catch (e) {}
+    }
+
+     自动保存：每5秒，以及暂停结束时
+    video.addEventListener('timeupdate', () = {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveProgress, 5000);
+    });
+    video.addEventListener('pause', saveProgress);
+    video.addEventListener('ended', saveProgress);
+
+     ========== 加载视频 ==========
+    function loadVideo(file) {
+        currentFile = file;
+        video.src = URL.createObjectURL(file);
+        video.style.display = 'block';
+        videoPlaceholder.style.display = 'none';
+        video.addEventListener('loadedmetadata', () = {
+            loadProgress(file);
+        }, { once true });
+    }
+
+     ========== 字幕解析 ==========
+    function parseTime(tc) {
+        const m = tc.match((d{2})(d{2})(d{2})[,.](d{3}));
+        return m  parseInt(m[1])3600 + parseInt(m[2])60 + parseInt(m[3]) + parseInt(m[4])1000  null;
+    }
+
+    function parseSRT(text) {
+        const lines = text.split(rn);
+        const result = [];
+        let i = 0;
+        if (lines[0].trim() === 'WEBVTT') i = 1;
+        while (i  lines.length) {
+            while (i  lines.length && !lines[i].trim()) i++;
+            if (i = lines.length) break;
+            if (^d+$.test(lines[i].trim())) i++;
+            if (i = lines.length) break;
+            const m = lines[i].match((d{2}d{2}d{2}[,.]d{3})s--s(d{2}d{2}d{2}[,.]d{3}));
+            if (!m) { i++; continue; }
+            const start = parseTime(m[1]), end = parseTime(m[2]);
+            i++;
+            const texts = [];
+            while (i  lines.length && lines[i].trim()) texts.push(lines[i++].trim());
+            const content = texts.join(' ').replace([^]g, '').trim();
+            if (content && start !== null && end !== null) result.push({ start, end, text content });
+        }
+        return result.sort((a, b) = a.start - b.start);
+    }
+
+    function loadSubtitles(arr) {
+        subtitles = arr.map((s, idx) = ({ ...s, id idx }));
+        renderSubtitles();
+        saveProgress();
+        toast(`已加载 ${subtitles.length} 条字幕`);
+    }
+
+    function renderSubtitles() {
+        subtitleList.innerHTML = '';
+        subtitles.forEach((s, idx) = {
+            const div = document.createElement('div');
+            div.className = 'subtitle-item';
+            div.innerHTML = `
+                span class=time-badge${formatTime(s.start)}span
+                span class=text${s.text}span
+            `;
+            div.addEventListener('click', () = {
+                document.querySelectorAll('.subtitle-item').forEach(el = el.classList.remove('active'));
+                div.classList.add('active');
+                video.currentTime = Math.max(0, s.start - 0.1);
+                 不强制播放，避免iPad卡顿
+            });
+            subtitleList.appendChild(div);
+        });
+    }
+
+    function filterSubtitles() {
+        const q = document.getElementById('subtitleSearch').value.toLowerCase();
+        document.querySelectorAll('.subtitle-item').forEach(el = {
+            el.classList.toggle('hidden', !el.textContent.toLowerCase().includes(q));
+        });
+    }
+
+     视频时间更新 → 自动高亮当前字幕
+    video.addEventListener('timeupdate', () = {
+        if (!subtitles.length) return;
+        const ct = video.currentTime;
+        const items = document.querySelectorAll('.subtitle-item');
+        for (let i = subtitles.length - 1; i = 0; i--) {
+            if (ct = subtitles[i].start && ct = subtitles[i].end) {
+                items.forEach(el = el.classList.remove('active'));
+                if (items[i]) items[i].classList.add('active');
+                return;
+            }
+        }
+    });
+
+     ========== 按钮事件 ==========
+    document.getElementById('btnLoadVideo').addEventListener('click', () = {
+        document.getElementById('videoFileInput').click();
+    });
+    document.getElementById('videoFileInput').addEventListener('change', e = {
+        if (e.target.files[0]) loadVideo(e.target.files[0]);
+        e.target.value = '';
+    });
+
+    document.getElementById('btnLoadSubtitle').addEventListener('click', () = {
+        document.getElementById('subtitleFileInput').click();
+    });
+    document.getElementById('subtitleFileInput').addEventListener('change', e = {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev = {
+            const parsed = parseSRT(ev.target.result);
+            if (parsed.length  0) loadSubtitles(parsed);
+            else toast('字幕解析失败');
+        };
+        reader.readAsText(file, 'UTF-8');
+        e.target.value = '';
+    });
+
+    document.getElementById('btnClearSubtitle').addEventListener('click', () = {
+        subtitles = [];
+        subtitleList.innerHTML = 'div style=text-aligncenter;color#555;padding40px;字幕已清除div';
+        saveProgress();
+        toast('字幕已清除');
+    });
+
+     拖拽支持
+    document.addEventListener('dragover', e = e.preventDefault());
+    document.addEventListener('drop', e = {
+        e.preventDefault();
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (['srt', 'vtt', 'txt'].includes(ext)) {
+            const reader = new FileReader();
+            reader.onload = ev = {
+                const parsed = parseSRT(ev.target.result);
+                if (parsed.length) loadSubtitles(parsed);
+                else toast('字幕解析失败');
+            };
+            reader.readAsText(file);
+        } else if (file.type.startsWith('video')) {
+            loadVideo(file);
+        }
+    });
+script
+body
+html
