@@ -163,9 +163,10 @@
    <script>
         let subtitles = [];
         let currentActiveIndex = -1;
-        let lastActiveIndex = -1; 
+        let lastActiveIndex = -1; // 用于记录上一次高亮的索引
         let searchQuery = '';
-        let isSeekingLock = false; // 【新增】防连击状态锁，专治 iPad 连点卡死
+        let isSeekingLock = false; // 防连击状态锁，专治 iPad 连点卡死
+        let currentVideoName = ''; // 【新增】用于记录当前加载的视频名称
 
         // 工具函数
         function formatTimeShort(seconds) {
@@ -216,6 +217,7 @@
             return result;
         }
 
+        // 初始化时重置 lastActiveIndex
         function loadSubtitles(arr) {
             subtitles = arr.map((item, idx) => ({ id: idx, start: item.start, end: item.end, text: item.text, element: null }));
             lastActiveIndex = -1; 
@@ -225,6 +227,7 @@
             updateSubtitleHighlight();
         }
 
+        // 原渲染保持一致
         function renderSubtitleList() {
             const subtitleList = document.getElementById('subtitleList');
             subtitleList.innerHTML = '';
@@ -249,25 +252,32 @@
             });
         }
 
-        // 高效更新高亮：每次仅操作 2 个 DOM 节点
+        // 不再用 forEach 遍历几千个节点，每次只精准修改 2 个节点的样式
         function updateSubtitleHighlight() {
+            // 1. 移除上一次高亮节点的样式
             if (lastActiveIndex !== -1 && subtitles[lastActiveIndex] && subtitles[lastActiveIndex].element) {
                 subtitles[lastActiveIndex].element.classList.remove('active');
             }
+            
+            // 2. 为当前节点添加高亮，并让侧边栏滚动条自动跟踪
             if (currentActiveIndex !== -1 && subtitles[currentActiveIndex] && subtitles[currentActiveIndex].element) {
                 const activeEl = subtitles[currentActiveIndex].element;
                 activeEl.classList.add('active');
+                
+                // 自动平滑滚动到视野内，避免跳转后找不到当前字幕
                 activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }
+            
+            // 3. 记录最新索引
             lastActiveIndex = currentActiveIndex;
         }
 
-        // 核心修复：带锁的跳转函数，彻底过滤高频连击指令
+        // 加入延迟播放与指令防抖锁，防止 iPad WebKit 引擎死锁卡死
         function seekToSubtitle(index) {
             if (index < 0 || index >= subtitles.length) return;
             
-            // 如果上一次点击的寻道（Seek）还没完成，直接拦截，不传给 iPad 媒体引擎
-            if (isSeekingLock) return; 
+            // 核心修复：如果上一个跳转还在加载，直接拦截连击，保护 iPad 媒体引擎
+            if (isSeekingLock) return;
 
             const video = document.getElementById('localVideo');
             const seekTime = Math.max(0, subtitles[index].start - 0.1);
@@ -275,28 +285,40 @@
             isSeekingLock = true; // 上锁
             currentActiveIndex = index;
             updateSubtitleHighlight();
-            
             video.currentTime = seekTime;
             
-            // 监听 WebKit 寻道结束事件（画面加载完成的瞬间）
+            // 监听底层寻道完毕事件
             const onSeeked = () => {
                 setTimeout(() => {
                     video.play().catch(() => {});
-                    isSeekingLock = false; // 彻底播起来了，才解开锁，允许下一次点击
+                    isSeekingLock = false; // 真正稳定播放了，才允许下一次点击
                 }, 50);
-                video.removeEventListener('seeked', onSeeked); // 释放内存
+                video.removeEventListener('seeked', onSeeked);
             };
-            
             video.addEventListener('seeked', onSeeked);
         }
 
-        // 加载本地视频
+        // 加载本地视频并自动检测历史记录
         function loadLocalVideo(file) {
             const video = document.getElementById('localVideo');
             const placeholder = document.getElementById('videoPlaceholder');
+            
+            currentVideoName = file.name; // 用文件名作为辨别记录的“钥匙”
             video.src = URL.createObjectURL(file);
             video.style.display = 'block';
             placeholder.style.display = 'none';
+
+            // 【新增】读取该视频文件的历史位置
+            const savedTime = localStorage.getItem('nail_history_' + currentVideoName);
+            if (savedTime) {
+                const targetTime = parseFloat(savedTime);
+                // 必须等视频元数据（如总长度、轨道信息）在 iPad 上加载好之后再去调 currentTime
+                const onLoadedMetadata = () => {
+                    video.currentTime = targetTime;
+                    video.removeEventListener('loadedmetadata', onLoadedMetadata);
+                };
+                video.addEventListener('loadedmetadata', onLoadedMetadata);
+            }
         }
 
         // 事件监听
@@ -323,7 +345,7 @@
         document.getElementById('btnClearSubtitle').addEventListener('click', () => {
             subtitles = [];
             currentActiveIndex = -1;
-            lastActiveIndex = -1;
+            lastActiveIndex = -1; // 清空时同步重置
             isSeekingLock = false;
             renderSubtitleList();
             updateSubtitleHighlight();
@@ -334,9 +356,19 @@
             applySearchFilter();
         });
 
-        // 视频播放随时间自动高亮字幕
+        // 视频时间更新 → 自动高亮当前字幕 + 【新增】每秒自动保存一次历史记录
+        let lastSavedTime = 0;
         document.getElementById('localVideo').addEventListener('timeupdate', () => {
-            const ct = document.getElementById('localVideo').currentTime;
+            const video = document.getElementById('localVideo');
+            const ct = video.currentTime;
+
+            // 1. 每隔一秒钟，静默存储一次当前进度（限频节流，完全不消耗性能）
+            if (currentVideoName && Math.abs(ct - lastSavedTime) > 1) {
+                localStorage.setItem('nail_history_' + currentVideoName, ct.toString());
+                lastSavedTime = ct;
+            }
+
+            // 2. 原始的时间轴高亮逻辑
             for (let i = subtitles.length - 1; i >= 0; i--) {
                 if (ct >= subtitles[i].start && ct <= subtitles[i].end) {
                     if (currentActiveIndex !== i) { 
