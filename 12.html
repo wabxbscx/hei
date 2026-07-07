@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>nail</title>
     <style>
         :root {
@@ -11,142 +11,83 @@
             --accent: #fb7299;
             --text: #e0e0e0;
             --border: #2a2a45;
-            --radius: 12px;
+            --radius: 10px;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-            background: var(--bg); color: var(--text); height: 100vh;
-            display: flex; flex-direction: column; overflow: hidden;
-            -webkit-tap-highlight-color: transparent;
+            font-family: -apple-system, sans-serif;
+            background: var(--bg); color: var(--text);
+            height: 100vh; display: flex; flex-direction: column;
+            overflow: hidden;
         }
-
         .header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 8px 16px; background: var(--surface);
+            padding: 10px 16px; background: var(--surface);
             border-bottom: 1px solid var(--border); flex-shrink: 0;
-            flex-wrap: wrap; gap: 6px;
         }
-        .header-brand { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
-        .header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .header span { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
         .btn {
-            padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border);
+            padding: 8px 14px; border-radius: 6px; border: 1px solid var(--border);
             background: #222240; color: var(--text); font-size: 0.85rem;
-            cursor: pointer; font-weight: 500; white-space: nowrap;
-            transition: background 0.2s;
+            cursor: pointer; margin-left: 8px;
         }
-        .btn:active { background: #fb729940; }
         .btn-accent { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-        .main-content { display: flex; flex: 1; overflow: hidden; }
-        .video-panel {
-            flex: 1; background: #000; position: relative;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .video-panel video, .video-panel iframe {
-            width: 100%; height: 100%; border: none; object-fit: contain;
-        }
-        .placeholder {
-            position: absolute; inset: 0; display: flex;
+        .video-area {
+            flex: 1; background: #000; display: flex;
             align-items: center; justify-content: center;
-            color: #555; text-align: center; pointer-events: none;
         }
-        .placeholder .icon { font-size: 3rem; margin-bottom: 12px; }
+        video, iframe { width: 100%; height: 100%; border: none; object-fit: contain; }
 
         .subtitle-panel {
-            width: 360px; background: var(--surface); display: flex;
-            flex-direction: column; border-left: 1px solid var(--border); flex-shrink: 0;
+            height: 40vh; background: var(--surface);
+            display: flex; flex-direction: column;
+            border-top: 1px solid var(--border);
         }
         .search-bar { padding: 10px; border-bottom: 1px solid var(--border); }
         .search-bar input {
-            width: 100%; padding: 10px; border-radius: 8px;
+            width: 100%; padding: 10px; border-radius: 6px;
             border: 1px solid var(--border); background: #0f0f1a;
             color: var(--text); font-size: 0.9rem; outline: none;
         }
-        .subtitle-list { flex: 1; overflow-y: auto; padding: 6px; }
+        .list { flex: 1; overflow-y: auto; padding: 6px; }
         .sub-item {
             display: flex; gap: 10px; padding: 10px; margin: 2px 0;
-            border-radius: 8px; cursor: pointer; border: 1.5px solid transparent;
+            border-radius: 6px; cursor: pointer;
         }
-        .sub-item:active { background: #fb729940; }
         .sub-item.active { background: var(--accent); color: #fff; }
         .sub-time {
             font-family: monospace; color: var(--accent);
             font-size: 0.75rem; min-width: 48px;
-            background: #fb729915; padding: 3px 6px; border-radius: 4px; text-align: center;
+            background: #fb729915; padding: 3px 6px; border-radius: 4px;
         }
         .sub-item.active .sub-time { background: #fff3; color: #fff; }
-        .sub-text { flex: 1; line-height: 1.4; font-size: 0.85rem; }
         .hidden { display: none !important; }
-
-        .modal {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .modal-box {
-            background: var(--surface); padding: 24px; border-radius: var(--radius);
-            width: 90%; max-width: 400px; border: 1px solid var(--border);
-        }
-        .modal-box input {
-            width: 100%; padding: 10px; border-radius: 8px;
-            border: 1px solid var(--border); background: #0f0f1a;
-            color: var(--text); font-size: 0.9rem; outline: none; margin: 12px 0;
-        }
-        .toast {
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: #333; color: #fff; padding: 10px 24px;
-            border-radius: 20px; font-size: 0.85rem; z-index: 999;
-        }
-
-        @media (max-width: 768px) {
-            .main-content { flex-direction: column; }
-            .subtitle-panel { width: 100%; height: 40vh; border-left: none; border-top: 1px solid var(--border); }
-        }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <div class="header-brand">🎬 nail</div>
-        <div class="header-actions">
-            <button class="btn btn-accent" id="btnBilibili">📺 B站视频</button>
+        <span>nail</span>
+        <div>
+            <button class="btn btn-accent" id="btnBili">📺 B站视频</button>
             <button class="btn" id="btnLocal">📹 本地视频</button>
-            <button class="btn" id="btnSubtitle">📝 导入字幕</button>
-            <button class="btn" id="btnClear">🗑️ 清除</button>
+            <button class="btn" id="btnSub">📝 导入字幕</button>
         </div>
     </div>
 
-    <div class="main-content">
-        <div class="video-panel" id="videoPanel">
-            <video id="video" style="display:none;" controls playsinline></video>
-            <iframe id="bilibiliPlayer" style="display:none;" allow="autoplay; fullscreen" allowfullscreen></iframe>
-            <div class="placeholder" id="placeholder">
-                <div>
-                    <div class="icon">🎬</div>
-                    <p>点击「📺 B站视频」或「📹 本地视频」开始</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="subtitle-panel">
-            <div class="search-bar">
-                <input type="text" id="search" placeholder="🔍 搜索字幕..." oninput="filterSubs()">
-            </div>
-            <div class="subtitle-list" id="subList">
-                <div style="text-align:center;color:#555;padding:30px;">暂无字幕</div>
-            </div>
-        </div>
+    <div class="video-area">
+        <video id="video" style="display:none;" controls playsinline></video>
+        <iframe id="biliFrame" style="display:none;" allow="autoplay; fullscreen" allowfullscreen></iframe>
+        <div id="placeholder" style="color:#555;text-align:center;">🎬<br>选择视频源开始</div>
     </div>
 
-    <!-- B站输入弹窗 -->
-    <div class="modal" id="bilibiliModal" style="display:none;">
-        <div class="modal-box">
-            <h3 style="color:var(--accent);">📺 输入B站视频链接</h3>
-            <input type="text" id="bilibiliInput" placeholder="粘贴链接或 BV 号...">
-            <div style="display:flex;gap:8px;justify-content:flex-end;">
-                <button class="btn" onclick="closeBilibiliModal()">取消</button>
-                <button class="btn btn-accent" onclick="loadBilibiliVideo()">加载</button>
-            </div>
+    <div class="subtitle-panel">
+        <div class="search-bar">
+            <input type="text" id="search" placeholder="🔍 搜索字幕..." oninput="filterSubs()">
+        </div>
+        <div class="list" id="subList">
+            <div style="text-align:center;color:#555;padding:30px;">暂无字幕</div>
         </div>
     </div>
 
@@ -154,142 +95,47 @@
     <input type="file" id="subInput" accept=".srt,.vtt,.txt" style="display:none">
 
     <script>
-        // ========== 状态管理 ==========
         let subtitles = [];
-        let videoType = null; // 'local' | 'bilibili'
-        let currentBvid = '';
-        let currentCid = '';
-        let saveTimer = null;
-
-        // ========== 记忆功能 ==========
-        function saveProgress() {
-            const data = {
-                videoType,
-                bilibili: videoType === 'bilibili' ? { bvid: currentBvid, cid: currentCid } : null,
-                local: null, // 本地视频无法记住文件本身，只记录类型
-                subtitles: subtitles.map(s => ({ start: s.start, end: s.end, text: s.text })),
-            };
-            if (videoType === 'local') {
-                const video = document.getElementById('video');
-                data.local = { currentTime: video.currentTime };
-            }
-            localStorage.setItem('nail_player_state', JSON.stringify(data));
-        }
-
-        function loadProgress() {
-            const raw = localStorage.getItem('nail_player_state');
-            if (!raw) return;
-            try {
-                const data = JSON.parse(raw);
-                if (data.subtitles && data.subtitles.length > 0) {
-                    subtitles = data.subtitles;
-                    renderSubtitles();
-                }
-                if (data.videoType === 'bilibili' && data.bilibili) {
-                    // 自动恢复上次B站视频
-                    currentBvid = data.bilibili.bvid;
-                    currentCid = data.bilibili.cid;
-                    videoType = 'bilibili';
-                    document.getElementById('bilibiliPlayer').src = 
-                        `https://player.bilibili.com/player.html?bvid=${currentBvid}&cid=${currentCid}&page=1&high_quality=1&autoplay=0`;
-                    document.getElementById('bilibiliPlayer').style.display = 'block';
-                    document.getElementById('placeholder').style.display = 'none';
-                } else if (data.videoType === 'local' && data.local) {
-                    // 本地视频无法自动加载文件，仅恢复字幕，需要用户重新选择视频
-                    videoType = 'local';
-                }
-            } catch (e) {}
-        }
-
-        // ========== 工具函数 ==========
-        function toast(msg) {
-            const t = document.createElement('div');
-            t.className = 'toast';
-            t.textContent = msg;
-            document.body.appendChild(t);
-            setTimeout(() => t.remove(), 2000);
-        }
+        let mode = null;
 
         function extractBV(input) {
             const match = input.trim().match(/(BV[a-zA-Z0-9]{10})/);
             return match ? match[1] : null;
         }
 
-        // ========== B站视频加载 ==========
-        async function loadBilibiliVideo() {
-            const input = document.getElementById('bilibiliInput').value;
+        // ========== B站视频（不调API，直接iframe） ==========
+        document.getElementById('btnBili').addEventListener('click', () => {
+            const input = prompt('请输入B站视频链接或BV号：');
+            if (!input) return;
             const bv = extractBV(input);
-            if (!bv) { toast('无效的BV号'); return; }
+            if (!bv) { alert('无效的BV号'); return; }
 
-            closeBilibiliModal();
-            toast('正在加载...');
+            mode = 'bilibili';
+            document.getElementById('video').style.display = 'none';
+            document.getElementById('placeholder').style.display = 'none';
+            const iframe = document.getElementById('biliFrame');
+            // 直接用 BV 号，B站播放器会自动解析
+            iframe.src = `https://player.bilibili.com/player.html?bvid=${bv}&page=1&high_quality=1&autoplay=0`;
+            iframe.style.display = 'block';
+        });
 
-            try {
-                const resp = await fetch(`https://api.bilibili.com/x/web-interface/view?bvid=${bv}`);
-                const data = await resp.json();
-                if (data.code !== 0) { toast('加载失败: ' + data.message); return; }
-
-                const { cid, title } = data.data;
-                currentBvid = bv;
-                currentCid = cid;
-                videoType = 'bilibili';
-
-                document.getElementById('video').style.display = 'none';
-                document.getElementById('placeholder').style.display = 'none';
-                const iframe = document.getElementById('bilibiliPlayer');
-                iframe.src = `https://player.bilibili.com/player.html?bvid=${bv}&cid=${cid}&page=1&high_quality=1&autoplay=0`;
-                iframe.style.display = 'block';
-                toast('✅ ' + title);
-
-                // 尝试加载B站官方字幕
-                try {
-                    const subResp = await fetch(`https://api.bilibili.com/x/player/v2?bvid=${bv}&cid=${cid}`);
-                    const subData = await subResp.json();
-                    if (subData.data?.subtitle?.subtitles?.length > 0) {
-                        const subUrl = 'https:' + subData.data.subtitle.subtitles[0].subtitle_url;
-                        const subJson = await (await fetch(subUrl)).json();
-                        subtitles = subJson.body.map(item => ({
-                            start: parseFloat(item.from),
-                            end: parseFloat(item.to),
-                            text: (item.content || '').replace(/<[^>]*>/g, '')
-                        }));
-                        renderSubtitles();
-                        toast(`已加载 ${subtitles.length} 条字幕`);
-                    }
-                } catch (e) {}
-
-                saveProgress();
-            } catch (e) {
-                toast('网络错误，请重试');
-            }
-        }
-
-        function closeBilibiliModal() {
-            document.getElementById('bilibiliModal').style.display = 'none';
-        }
-
-        // ========== 本地视频加载 ==========
-        function loadLocalVideo(file) {
-            videoType = 'local';
-            document.getElementById('bilibiliPlayer').style.display = 'none';
+        // ========== 本地视频 ==========
+        document.getElementById('btnLocal').addEventListener('click', () => {
+            document.getElementById('videoInput').click();
+        });
+        document.getElementById('videoInput').addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            mode = 'local';
+            document.getElementById('biliFrame').style.display = 'none';
             document.getElementById('placeholder').style.display = 'none';
             const video = document.getElementById('video');
             video.src = URL.createObjectURL(file);
             video.style.display = 'block';
-            toast('✅ 本地视频已加载');
-            // 尝试恢复进度（由 loadProgress 处理）
-            const saved = JSON.parse(localStorage.getItem('nail_player_state') || '{}');
-            if (saved.local && saved.local.currentTime) {
-                video.addEventListener('loadedmetadata', () => {
-                    if (saved.local.currentTime < video.duration) {
-                        video.currentTime = saved.local.currentTime;
-                        toast('已恢复上次进度');
-                    }
-                }, { once: true });
-            }
-        }
+            e.target.value = '';
+        });
 
-        // ========== 字幕解析与渲染 ==========
+        // ========== 字幕 ==========
         function parseSRT(text) {
             const lines = text.split(/\r?\n/);
             const result = [];
@@ -307,9 +153,9 @@
                 const texts = [];
                 while (i < lines.length && lines[i].trim()) texts.push(lines[i++].trim());
                 const content = texts.join(' ').replace(/<[^>]*>/g, '').trim();
-                if (content && start !== null && end !== null) result.push({ start, end, text: content });
+                if (content) result.push({ start, end, text: content });
             }
-            return result.sort((a, b) => a.start - b.start);
+            return result;
         }
 
         function parseTime(tc) {
@@ -317,28 +163,31 @@
             return m ? parseInt(m[1])*3600 + parseInt(m[2])*60 + parseInt(m[3]) + parseInt(m[4])/1000 : null;
         }
 
-        function renderSubtitles() {
-            const container = document.getElementById('subList');
-            container.innerHTML = '';
+        function render() {
+            const c = document.getElementById('subList');
+            c.innerHTML = '';
             subtitles.forEach((s, idx) => {
-                const div = document.createElement('div');
-                div.className = 'sub-item';
-                div.innerHTML = `
-                    <span class="sub-time">${formatTime(s.start)}</span>
-                    <span class="sub-text">${s.text}</span>
-                `;
-                div.addEventListener('click', () => {
+                const d = document.createElement('div');
+                d.className = 'sub-item';
+                d.innerHTML = `<span class="sub-time">${fmt(s.start)}</span><span>${s.text}</span>`;
+                d.addEventListener('click', () => {
                     document.querySelectorAll('.sub-item').forEach(el => el.classList.remove('active'));
-                    div.classList.add('active');
-                    seekTo(s.start);
+                    d.classList.add('active');
+                    const t = Math.max(0, s.start - 0.1);
+                    if (mode === 'local') {
+                        document.getElementById('video').currentTime = t;
+                    } else if (mode === 'bilibili') {
+                        const iframe = document.getElementById('biliFrame');
+                        iframe.contentWindow?.postMessage(JSON.stringify({type:'seek',data:{time:t}}), '*');
+                    }
                 });
-                container.appendChild(div);
+                c.appendChild(d);
             });
         }
 
-        function formatTime(sec) {
-            const m = Math.floor(sec/60), s = Math.floor(sec%60);
-            return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        function fmt(s) {
+            const m = Math.floor(s/60), sec = Math.floor(s%60);
+            return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
         }
 
         function filterSubs() {
@@ -348,81 +197,20 @@
             });
         }
 
-        function seekTo(time) {
-            if (videoType === 'local') {
-                const video = document.getElementById('video');
-                video.currentTime = Math.max(0, time - 0.1);
-                // 不自动播放，避免iPad卡顿
-            } else if (videoType === 'bilibili') {
-                const iframe = document.getElementById('bilibiliPlayer');
-                if (iframe.contentWindow) {
-                    iframe.contentWindow.postMessage(JSON.stringify({
-                        type: 'seek',
-                        data: { time: time }
-                    }), '*');
-                }
-            }
-        }
-
-        // ========== 事件绑定 ==========
-        document.getElementById('btnBilibili').addEventListener('click', () => {
-            document.getElementById('bilibiliModal').style.display = 'flex';
-            document.getElementById('bilibiliInput').value = '';
-            document.getElementById('bilibiliInput').focus();
-        });
-        document.getElementById('bilibiliModal').addEventListener('click', function(e) {
-            if (e.target === this) closeBilibiliModal();
-        });
-
-        document.getElementById('btnLocal').addEventListener('click', () => {
-            document.getElementById('videoInput').click();
-        });
-        document.getElementById('videoInput').addEventListener('change', (e) => {
-            if (e.target.files[0]) loadLocalVideo(e.target.files[0]);
-            e.target.value = '';
-        });
-
-        document.getElementById('btnSubtitle').addEventListener('click', () => {
+        document.getElementById('btnSub').addEventListener('click', () => {
             document.getElementById('subInput').click();
         });
-        document.getElementById('subInput').addEventListener('change', (e) => {
+        document.getElementById('subInput').addEventListener('change', e => {
             const file = e.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = ev => {
-                const parsed = parseSRT(ev.target.result);
-                if (parsed.length) {
-                    subtitles = parsed;
-                    renderSubtitles();
-                    saveProgress();
-                    toast(`已导入 ${subtitles.length} 条字幕`);
-                } else {
-                    toast('字幕解析失败');
-                }
+                subtitles = parseSRT(ev.target.result);
+                if (subtitles.length) render();
             };
-            reader.readAsText(file, 'UTF-8');
+            reader.readAsText(file);
             e.target.value = '';
         });
-
-        document.getElementById('btnClear').addEventListener('click', () => {
-            subtitles = [];
-            document.getElementById('subList').innerHTML = '<div style="text-align:center;color:#555;padding:30px;">字幕已清除</div>';
-            saveProgress();
-        });
-
-        // 定期保存进度
-        document.getElementById('video').addEventListener('timeupdate', () => {
-            if (saveTimer) clearTimeout(saveTimer);
-            saveTimer = setTimeout(saveProgress, 3000);
-        });
-        document.getElementById('video').addEventListener('pause', saveProgress);
-        document.getElementById('video').addEventListener('ended', saveProgress);
-
-        // 页面关闭前保存
-        window.addEventListener('beforeunload', saveProgress);
-
-        // 启动时恢复状态
-        loadProgress();
     </script>
 </body>
 </html>
