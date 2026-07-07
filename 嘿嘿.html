@@ -160,11 +160,12 @@
     <input type="file" id="videoFileInput" accept="video/*" style="display:none;" />
     <input type="file" id="subtitleFileInput" accept=".srt,.vtt,.txt" style="display:none;" />
 
-    <script>
+   <script>
         let subtitles = [];
         let currentActiveIndex = -1;
-        let lastActiveIndex = -1; // 【新增】用于记录上一次高亮的索引
+        let lastActiveIndex = -1; 
         let searchQuery = '';
+        let isSeekingLock = false; // 【新增】防连击状态锁，专治 iPad 连点卡死
 
         // 工具函数
         function formatTimeShort(seconds) {
@@ -215,16 +216,15 @@
             return result;
         }
 
-        // 【已修改】初始化时重置 lastActiveIndex
         function loadSubtitles(arr) {
             subtitles = arr.map((item, idx) => ({ id: idx, start: item.start, end: item.end, text: item.text, element: null }));
             lastActiveIndex = -1; 
             currentActiveIndex = -1;
+            isSeekingLock = false; // 重新导字幕时重置锁
             renderSubtitleList();
             updateSubtitleHighlight();
         }
 
-        // 【已修改】原渲染保持一致
         function renderSubtitleList() {
             const subtitleList = document.getElementById('subtitleList');
             subtitleList.innerHTML = '';
@@ -249,39 +249,45 @@
             });
         }
 
-        // 【已大幅优化】不再用 forEach 遍历几千个节点，每次只精准修改 2 个节点的样式
+        // 高效更新高亮：每次仅操作 2 个 DOM 节点
         function updateSubtitleHighlight() {
-            // 1. 移除上一次高亮节点的样式
             if (lastActiveIndex !== -1 && subtitles[lastActiveIndex] && subtitles[lastActiveIndex].element) {
                 subtitles[lastActiveIndex].element.classList.remove('active');
             }
-            
-            // 2. 为当前节点添加高亮，并让侧边栏滚动条自动跟踪
             if (currentActiveIndex !== -1 && subtitles[currentActiveIndex] && subtitles[currentActiveIndex].element) {
                 const activeEl = subtitles[currentActiveIndex].element;
                 activeEl.classList.add('active');
-                
-                // 自动平滑滚动到视野内，避免跳转后找不到当前字幕
                 activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }
-            
-            // 3. 记录最新索引
             lastActiveIndex = currentActiveIndex;
         }
 
-        // 【已修改】加入延迟播放，防止 iPad WebKit 引擎死锁卡死
+        // 核心修复：带锁的跳转函数，彻底过滤高频连击指令
         function seekToSubtitle(index) {
             if (index < 0 || index >= subtitles.length) return;
+            
+            // 如果上一次点击的寻道（Seek）还没完成，直接拦截，不传给 iPad 媒体引擎
+            if (isSeekingLock) return; 
+
+            const video = document.getElementById('localVideo');
             const seekTime = Math.max(0, subtitles[index].start - 0.1);
+            
+            isSeekingLock = true; // 上锁
             currentActiveIndex = index;
             updateSubtitleHighlight();
-            const video = document.getElementById('localVideo');
+            
             video.currentTime = seekTime;
             
-            // 核心修复：通过 50ms 的延迟错开 play() 的时机
-            setTimeout(() => {
-                video.play().catch(() => {});
-            }, 50);
+            // 监听 WebKit 寻道结束事件（画面加载完成的瞬间）
+            const onSeeked = () => {
+                setTimeout(() => {
+                    video.play().catch(() => {});
+                    isSeekingLock = false; // 彻底播起来了，才解开锁，允许下一次点击
+                }, 50);
+                video.removeEventListener('seeked', onSeeked); // 释放内存
+            };
+            
+            video.addEventListener('seeked', onSeeked);
         }
 
         // 加载本地视频
@@ -317,7 +323,8 @@
         document.getElementById('btnClearSubtitle').addEventListener('click', () => {
             subtitles = [];
             currentActiveIndex = -1;
-            lastActiveIndex = -1; // 清空时同步重置
+            lastActiveIndex = -1;
+            isSeekingLock = false;
             renderSubtitleList();
             updateSubtitleHighlight();
         });
@@ -327,7 +334,7 @@
             applySearchFilter();
         });
 
-        // 视频时间更新 → 自动高亮当前字幕（同样用到了优化后的高效高亮函数）
+        // 视频播放随时间自动高亮字幕
         document.getElementById('localVideo').addEventListener('timeupdate', () => {
             const ct = document.getElementById('localVideo').currentTime;
             for (let i = subtitles.length - 1; i >= 0; i--) {
