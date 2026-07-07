@@ -163,10 +163,13 @@
    <script>
         let subtitles = [];
         let currentActiveIndex = -1;
-        let lastActiveIndex = -1; // 用于记录上一次高亮的索引
+        let lastActiveIndex = -1; 
         let searchQuery = '';
-        let isSeekingLock = false; // 防连击状态锁，专治 iPad 连点卡死
-        let currentVideoName = ''; // 【新增】用于记录当前加载的视频名称
+        
+        // 【iPad 专属重围】物理冷却锁
+        let ipadClickTimeout = null;
+        let lastClickTime = 0;
+        let currentVideoName = ''; 
 
         // 工具函数
         function formatTimeShort(seconds) {
@@ -217,17 +220,14 @@
             return result;
         }
 
-        // 初始化时重置 lastActiveIndex
         function loadSubtitles(arr) {
             subtitles = arr.map((item, idx) => ({ id: idx, start: item.start, end: item.end, text: item.text, element: null }));
             lastActiveIndex = -1; 
             currentActiveIndex = -1;
-            isSeekingLock = false; // 重新导字幕时重置锁
             renderSubtitleList();
             updateSubtitleHighlight();
         }
 
-        // 原渲染保持一致
         function renderSubtitleList() {
             const subtitleList = document.getElementById('subtitleList');
             subtitleList.innerHTML = '';
@@ -252,67 +252,74 @@
             });
         }
 
-        // 不再用 forEach 遍历几千个节点，每次只精准修改 2 个节点的样式
         function updateSubtitleHighlight() {
-            // 1. 移除上一次高亮节点的样式
             if (lastActiveIndex !== -1 && subtitles[lastActiveIndex] && subtitles[lastActiveIndex].element) {
                 subtitles[lastActiveIndex].element.classList.remove('active');
             }
-            
-            // 2. 为当前节点添加高亮，并让侧边栏滚动条自动跟踪
             if (currentActiveIndex !== -1 && subtitles[currentActiveIndex] && subtitles[currentActiveIndex].element) {
                 const activeEl = subtitles[currentActiveIndex].element;
                 activeEl.classList.add('active');
-                
-                // 自动平滑滚动到视野内，避免跳转后找不到当前字幕
                 activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
             }
-            
-            // 3. 记录最新索引
             lastActiveIndex = currentActiveIndex;
         }
 
-        // 加入延迟播放与指令防抖锁，防止 iPad WebKit 引擎死锁卡死
+        // 【针对 iPad 重写】不再信任原生的 seeked 事件，改用绝对时间戳物理防御
         function seekToSubtitle(index) {
             if (index < 0 || index >= subtitles.length) return;
             
-            // 核心修复：如果上一个跳转还在加载，直接拦截连击，保护 iPad 媒体引擎
-            if (isSeekingLock) return;
-
+            const now = Date.now();
             const video = document.getElementById('localVideo');
             const seekTime = Math.max(0, subtitles[index].start - 0.1);
-            
-            isSeekingLock = true; // 上锁
+
+            // 1. 高亮立即切换（保证视觉上不卡顿）
             currentActiveIndex = index;
             updateSubtitleHighlight();
-            video.currentTime = seekTime;
-            
-            // 监听底层寻道完毕事件
-            const onSeeked = () => {
-                setTimeout(() => {
-                    video.play().catch(() => {});
-                    isSeekingLock = false; // 真正稳定播放了，才允许下一次点击
-                }, 50);
-                video.removeEventListener('seeked', onSeeked);
-            };
-            video.addEventListener('seeked', onSeeked);
+
+            // 2. 强行丢弃高频的点击指令（限制两次对 iPad 媒体引擎的轰炸间隔不能低于 250 毫秒）
+            if (now - lastClickTime < 250) {
+                // 如果用户还在疯狂连点，清除上一次的未执行任务，只保留最后一次
+                clearTimeout(ipadClickTimeout);
+                ipadClickTimeout = setTimeout(() => {
+                    executeIpadSeek(video, seekTime);
+                }, 150);
+                return;
+            }
+
+            // 3. 如果是正常点击，直接触发跳转
+            clearTimeout(ipadClickTimeout);
+            lastClickTime = now;
+            executeIpadSeek(video, seekTime);
         }
 
-        // 加载本地视频并自动检测历史记录
+        // 专门应付 iPad WebKit 的稳定跳转器
+        function executeIpadSeek(video, targetTime) {
+            // 在 iPad 改变时间前，先暂停，这是防止底层渲染链死锁的关键
+            if (!video.paused) {
+                video.pause();
+            }
+            
+            video.currentTime = targetTime;
+
+            // 必须使用显式的延迟执行 play()，给本地 Blob 数据流留出缓冲时间
+            setTimeout(() => {
+                video.play().catch(() => {});
+            }, 80);
+        }
+
+        // 加载本地视频与恢复历史进度
         function loadLocalVideo(file) {
             const video = document.getElementById('localVideo');
             const placeholder = document.getElementById('videoPlaceholder');
             
-            currentVideoName = file.name; // 用文件名作为辨别记录的“钥匙”
+            currentVideoName = file.name; 
             video.src = URL.createObjectURL(file);
             video.style.display = 'block';
             placeholder.style.display = 'none';
 
-            // 【新增】读取该视频文件的历史位置
             const savedTime = localStorage.getItem('nail_history_' + currentVideoName);
             if (savedTime) {
                 const targetTime = parseFloat(savedTime);
-                // 必须等视频元数据（如总长度、轨道信息）在 iPad 上加载好之后再去调 currentTime
                 const onLoadedMetadata = () => {
                     video.currentTime = targetTime;
                     video.removeEventListener('loadedmetadata', onLoadedMetadata);
@@ -328,85 +335,6 @@
             e.target.value = '';
         });
 
-        document.getElementById('btnLoadSubtitle').addEventListener('click', () => document.getElementById('subtitleFileInput').click());
-        document.getElementById('subtitleFileInput').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const parsed = parseSubtitles(ev.target.result);
-                if (parsed.length === 0) return alert('未解析到有效字幕');
-                loadSubtitles(parsed);
-            };
-            reader.readAsText(file, 'UTF-8');
-            e.target.value = '';
-        });
-
-        document.getElementById('btnClearSubtitle').addEventListener('click', () => {
-            subtitles = [];
-            currentActiveIndex = -1;
-            lastActiveIndex = -1; // 清空时同步重置
-            isSeekingLock = false;
-            renderSubtitleList();
-            updateSubtitleHighlight();
-        });
-
-        document.getElementById('subtitleSearch').addEventListener('input', (e) => {
-            searchQuery = e.target.value;
-            applySearchFilter();
-        });
-
-        // 视频时间更新 → 自动高亮当前字幕 + 【新增】每秒自动保存一次历史记录
-        let lastSavedTime = 0;
-        document.getElementById('localVideo').addEventListener('timeupdate', () => {
-            const video = document.getElementById('localVideo');
-            const ct = video.currentTime;
-
-            // 1. 每隔一秒钟，静默存储一次当前进度（限频节流，完全不消耗性能）
-            if (currentVideoName && Math.abs(ct - lastSavedTime) > 1) {
-                localStorage.setItem('nail_history_' + currentVideoName, ct.toString());
-                lastSavedTime = ct;
-            }
-
-            // 2. 原始的时间轴高亮逻辑
-            for (let i = subtitles.length - 1; i >= 0; i--) {
-                if (ct >= subtitles[i].start && ct <= subtitles[i].end) {
-                    if (currentActiveIndex !== i) { 
-                        currentActiveIndex = i; 
-                        updateSubtitleHighlight(); 
-                    }
-                    return;
-                }
-            }
-        });
-
-        // 拖拽支持
-        document.addEventListener('dragover', e => { e.preventDefault(); });
-        document.addEventListener('drop', e => {
-            e.preventDefault();
-            const file = e.dataTransfer?.files[0];
-            if (!file) return;
-            const ext = file.name.split('.').pop()?.toLowerCase();
-            if (['srt', 'vtt', 'txt'].includes(ext)) {
-                const reader = new FileReader();
-                reader.onload = ev => {
-                    const parsed = parseSubtitles(ev.target.result);
-                    if (parsed.length) loadSubtitles(parsed);
-                };
-                reader.readAsText(file, 'UTF-8');
-            } else if (file.type.startsWith('video/')) {
-                loadLocalVideo(file);
-            }
-        });
-
-        // 键盘快捷键
-        document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT') return;
-            const video = document.getElementById('localVideo');
-            if (e.code === 'Space') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
-            if (e.code === 'ArrowRight') { e.preventDefault(); video.currentTime = Math.min(video.duration, video.currentTime + 5); }
-            if (e.code === 'ArrowLeft') { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 5); }
-        });
-    </script>
+        document.getElementById('btnLoadSubtitle').addEventListener('click', () => document.getElementById('
 </body>
 </html>
