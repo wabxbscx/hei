@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>iPad 丝滑视频字幕学习器</title>
+    <title>奶龙</title>
     <style>
-        /* 强制整个大网页彻底锁死，不允许外层滚动 */
+        /* 强制大网页彻底锁死，不允许外层乱滚动 */
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
         
         body { padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
         .controls { margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
-        .container { display: flex; gap: 20px; min-height: 0; flex: 1; height: calc(100% - 60px); }
+        .container { display: flex; gap: 20px; min-height: 0; flex: 1; }
         
-        video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+        video { width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
         .search-bar { width: 100%; padding: 8px 12px; border: 1px solid #d2d2d7; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; font-size: 14px; flex-shrink: 0; }
         
         /* 字幕列表必须独立拥有滚动条 */
@@ -25,7 +25,10 @@
         .text { font-size: 13px; line-height: 1.4; word-break: break-all; }
         
         .hidden-by-search { display: none !important; }
-        .placeholder { color: #fff; text-align: center; font-size: 16px; padding: 0 20px; }
+        
+        /* 修复：提示文字默认占满视频区域，居中显示 */
+        .placeholder { width: 100%; height: 100%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; min-height: 150px; background: #000; border-radius: 12px; }
+        
         button { padding: 8px 16px; border: none; background: #0071e3; color: #fff; border-radius: 8px; cursor: pointer; font-size: 14px; flex-shrink: 0; }
         button:hover { background: #0077ed; }
         .btn-danger { background: #ff3b30; }
@@ -46,38 +49,16 @@
             user-select: none;
         }
         
-        /* 增加包裹层方便触控交互 */
-        .progress-wrapper {
-            flex: 1;
-            height: 20px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-        }
-        
-        .custom-progress-container {
-            width: 100%;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.3);
-            position: relative;
-            border-radius: 2px;
-            transition: height 0.1s ease;
-        }
-        .progress-wrapper:hover .custom-progress-container,
-        .progress-wrapper:active .custom-progress-container { height: 8px; }
-        
+        .progress-wrapper { flex: 1; height: 20px; display: flex; align-items: center; cursor: pointer; }
+        .custom-progress-container { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.3); position: relative; border-radius: 2px; transition: height 0.1s ease; }
+        .progress-wrapper:hover .custom-progress-container, .progress-wrapper:active .custom-progress-container { height: 8px; }
         .custom-progress-bar { height: 100%; width: 0%; background: #0071e3; border-radius: 2px; position: relative; }
-        
-        /* 触控圆点响应范围调整 */
         .custom-progress-bar::after {
             content: ''; position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
             width: 12px; height: 12px; background: #fff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
-        .time-display {
-            color: #aeaeb2; font-size: 13px; font-family: Menlo, Monaco, Consolas, monospace;
-            white-space: nowrap; user-select: none;
-        }
+        .time-display { color: #aeaeb2; font-size: 13px; font-family: Menlo, Monaco, Consolas, monospace; white-space: nowrap; user-select: none; }
 
         /* 横屏布局 */
         @media (orientation: landscape) {
@@ -111,7 +92,6 @@
                 padding: 15px; 
                 box-sizing: border-box; 
                 min-height: 0; 
-                height: calc(100% - 100vw * 9 / 16 - 20px); 
             }
         }
 
@@ -158,7 +138,7 @@
         let searchQuery = '';
         let currentVideoName = ''; 
         let isWaitingForPad = false; 
-        let isDraggingProgress = false; // 是否正在拖动进度条
+        let isDraggingProgress = false; 
 
         function formatTimeDisplay(seconds) {
             if (isNaN(seconds)) return '00:00';
@@ -201,260 +181,4 @@
                 const line1 = lines[i].trim();
                 if (/^\d+$/.test(line1) && !isVTT) { i++; if (i >= lines.length) break; }
                 const timeLine = lines[i].trim();
-                const timeMatch = timeLine.match(/(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/);
-                if (!timeMatch) { i++; continue; }
-                const start = parseTimecode(timeMatch[1]);
-                const end = parseTimecode(timeMatch[2]);
-                if (start === null || end === null) { i++; continue; }
-                i++;
-                const textLines = [];
-                while (i < lines.length && lines[i].trim() !== '') { textLines.push(lines[i].trim()); i++; }
-                const text = textLines.join(' ').trim();
-                if (text) result.push({ start, end, text });
-            }
-            result.sort((a, b) => a.start - b.start);
-            return result;
-        }
-
-        function loadSubtitles(arr) {
-            subtitles = arr.map((item, idx) => ({ id: idx, start: item.start, end: item.end, text: item.text, element: null }));
-            lastActiveIndex = -1; 
-            currentActiveIndex = -1;
-            isWaitingForPad = false;
-            renderSubtitleList();
-            updateSubtitleHighlight();
-        }
-
-        function renderSubtitleList() {
-            const subtitleList = document.getElementById('subtitleList');
-            subtitleList.innerHTML = '';
-            subtitles.forEach((sub, idx) => {
-                const el = document.createElement('div');
-                el.className = 'subtitle-item';
-                el.dataset.index = idx;
-                el.innerHTML = `<span class="time-badge">${formatTimeShort(sub.start)}</span><span class="text">${escapeHtml(sub.text)}</span>`;
-                el.addEventListener('click', () => seekToSubtitle(idx));
-                subtitleList.appendChild(el);
-                sub.element = el;
-            });
-            document.getElementById('emptySubtitleState').style.display = subtitles.length ? 'none' : 'flex';
-            applySearchFilter();
-        }
-
-        function applySearchFilter() {
-            const q = searchQuery.toLowerCase().trim();
-            subtitles.forEach(sub => {
-                if (!sub.element) return;
-                sub.element.classList.toggle('hidden-by-search', q && !sub.text.toLowerCase().includes(q));
-            });
-        }
-
-        function updateSubtitleHighlight() {
-            if (lastActiveIndex !== -1 && subtitles[lastActiveIndex] && subtitles[lastActiveIndex].element) {
-                subtitles[lastActiveIndex].element.classList.remove('active');
-            }
-            if (currentActiveIndex !== -1 && subtitles[currentActiveIndex] && subtitles[currentActiveIndex].element) {
-                const activeEl = subtitles[currentActiveIndex].element;
-                activeEl.classList.add('active');
-                
-                const container = document.getElementById('subtitleList');
-                const containerTop = container.scrollTop;
-                const containerBottom = containerTop + container.clientHeight;
-                const elemTop = activeEl.offsetTop;
-                const elemBottom = elemTop + activeEl.clientHeight;
-
-                if (elemTop < containerTop || elemBottom > containerBottom) {
-                    container.scrollTo({
-                        top: elemTop - container.clientHeight / 2 + activeEl.clientHeight / 2,
-                        behavior: 'smooth'
-                    });
-                }
-            }
-            lastActiveIndex = currentActiveIndex;
-        }
-
-        function seekToSubtitle(index) {
-            if (index < 0 || index >= subtitles.length) return;
-            const video = document.getElementById('localVideo');
-            const seekTime = Math.max(0, subtitles[index].start - 0.1);
-
-            currentActiveIndex = index;
-            updateSubtitleHighlight();
-
-            if (!video.paused) { video.pause(); }
-
-            isWaitingForPad = true; 
-            video.currentTime = seekTime;
-
-            const onReadyToPlay = () => {
-                setTimeout(() => {
-                    video.play().catch(() => {});
-                    isWaitingForPad = false;
-                }, 80);
-                video.removeEventListener('seeked', onReadyToPlay);
-                video.removeEventListener('canplay', onReadyToPlay);
-            };
-
-            video.addEventListener('seeked', onReadyToPlay);
-            video.addEventListener('canplay', onReadyToPlay);
-        }
-
-        function loadLocalVideo(file) {
-            const video = document.getElementById('localVideo');
-            const placeholder = document.getElementById('videoPlaceholder');
-            const ctrlBar = document.getElementById('videoControlsBar');
-            
-            currentVideoName = (file && file.name) ? file.name : 'ipad_standard_video'; 
-            video.src = URL.createObjectURL(file);
-            video.style.display = 'block';
-            placeholder.style.display = 'none';
-            ctrlBar.style.display = 'flex'; 
-
-            const savedTime = localStorage.getItem('nail_history_' + currentVideoName);
-            if (savedTime) {
-                const targetTime = parseFloat(savedTime);
-                const onLoadedMetadata = () => {
-                    video.currentTime = targetTime;
-                    document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(targetTime)} / ${formatTimeDisplay(video.duration)}`;
-                    video.removeEventListener('loadedmetadata', onLoadedMetadata);
-                };
-                video.addEventListener('loadedmetadata', onLoadedMetadata);
-            }
-        }
-
-        document.getElementById('btnLoadVideo').addEventListener('click', () => document.getElementById('videoFileInput').click());
-        document.getElementById('videoFileInput').addEventListener('change', (e) => {
-            if (e.target.files && e.target.files[0]) loadLocalVideo(e.target.files[0]);
-            e.target.value = '';
-        });
-
-        document.getElementById('btnLoadSubtitle').addEventListener('click', () => document.getElementById('subtitleFileInput').click());
-        document.getElementById('subtitleFileInput').addEventListener('change', (e) => {
-            if (!e.target.files || !e.target.files[0]) return;
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                const parsed = parseSubtitles(ev.target.result);
-                if (parsed.length === 0) return alert('未解析到有效字幕');
-                loadSubtitles(parsed);
-            };
-            reader.readAsText(file, 'UTF-8');
-            e.target.value = '';
-        });
-
-        document.getElementById('btnClearSubtitle').addEventListener('click', () => {
-            subtitles = [];
-            currentActiveIndex = -1;
-            lastActiveIndex = -1;
-            renderSubtitleList();
-            updateSubtitleHighlight();
-        });
-
-        document.getElementById('subtitleSearch').addEventListener('input', (e) => {
-            searchQuery = e.target.value;
-            applySearchFilter();
-        });
-
-        let lastSavedTime = 0;
-        document.getElementById('localVideo').addEventListener('timeupdate', () => {
-            const video = document.getElementById('localVideo');
-            const ct = video.currentTime;
-            const dur = video.duration;
-
-            // 拖拽时不通过视频本身更新时间文本和进度条位置，防止冲突扯皮
-            if (!isDraggingProgress) {
-                document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(ct)} / ${formatTimeDisplay(dur)}`;
-                if (dur > 0) {
-                    const percentage = (ct / dur) * 100;
-                    document.getElementById('progressBar').style.width = percentage + '%';
-                }
-            }
-
-            if (isWaitingForPad) return;
-
-            if (currentVideoName && Math.abs(ct - lastSavedTime) > 1) {
-                localStorage.setItem('nail_history_' + currentVideoName, ct.toString());
-                lastSavedTime = ct;
-            }
-
-            for (let i = subtitles.length - 1; i >= 0; i--) {
-                if (ct >= subtitles[i].start && ct <= subtitles[i].end) {
-                    if (currentActiveIndex !== i) { 
-                        currentActiveIndex = i; 
-                        updateSubtitleHighlight(); 
-                    }
-                    return;
-                }
-            }
-        });
-
-        // =================【核心升级：支持点击 + iPad 触控丝滑拖拽】=================
-        const progressWrapper = document.getElementById('progressWrapper');
-        const videoElement = document.getElementById('localVideo');
-
-        function setProgressByX(clientX) {
-            if (!videoElement.duration) return;
-            const rect = document.getElementById('progressContainer').getBoundingClientRect();
-            let offsetX = clientX - rect.left;
-            if (offsetX < 0) offsetX = 0;
-            if (offsetX > rect.width) offsetX = rect.width;
-            
-            const percentage = offsetX / rect.width;
-            const newTime = percentage * videoElement.duration;
-            
-            // 实时预览进度条位置和数字时间
-            document.getElementById('progressBar').style.width = (percentage * 100) + '%';
-            document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(newTime)} / ${formatTimeDisplay(videoElement.duration)}`;
-            
-            return newTime;
-        }
-
-        // 1. 鼠标点击或手指轻触直接跳转
-        progressWrapper.addEventListener('click', (e) => {
-            if (isDraggingProgress) return; // 正在拖拽时交给拖拽处理
-            const newTime = setProgressByX(e.clientX);
-            if (newTime !== undefined) videoElement.currentTime = newTime;
-        });
-
-        // 2. iPad 触控屏手指拖拽监听
-        progressWrapper.addEventListener('touchstart', (e) => {
-            isDraggingProgress = true;
-            setProgressByX(e.touches[0].clientX);
-        });
-
-        progressWrapper.addEventListener('touchmove', (e) => {
-            if (!isDraggingProgress) return;
-            e.preventDefault(); // 阻止滚动网页的默认行为
-            setProgressByX(e.touches[0].clientX);
-        });
-
-        progressWrapper.addEventListener('touchend', (e) => {
-            if (!isDraggingProgress) return;
-            isDraggingProgress = false;
-            // 抬起手指时，把最终计算出的位置真正赋给视频
-            const rect = document.getElementById('progressContainer').getBoundingClientRect();
-            let offsetX = e.changedTouches[0].clientX - rect.left;
-            if (offsetX < 0) offsetX = 0;
-            if (offsetX > rect.width) offsetX = rect.width;
-            
-            if (videoElement.duration) {
-                videoElement.currentTime = (offsetX / rect.width) * videoElement.duration;
-            }
-        });
-        // =========================================================================
-
-        document.getElementById('localVideo').addEventListener('click', () => {
-            const video = document.getElementById('localVideo');
-            video.paused ? video.play() : video.pause();
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT') return;
-            const video = document.getElementById('localVideo');
-            if (e.code === 'Space') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
-            if (e.code === 'ArrowRight') { e.preventDefault(); video.currentTime = Math.min(video.duration, video.currentTime + 5); }
-            if (e.code === 'ArrowLeft') { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 5); }
-        });
-    </script>
-</body>
-</html>
+                const timeMatch = timeLine.match
