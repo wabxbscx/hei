@@ -10,27 +10,57 @@
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
         body { padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
         
-        /* 顶部按钮控制区 */
+        /* 顶部控制栏 */
         .controls { 
             margin-bottom: 15px; 
             display: flex; 
-            gap: 10px; 
+            gap: 12px; 
             flex-wrap: wrap; 
             flex-shrink: 0; 
             position: relative;
             z-index: 999; 
         }
         
-        /* 精美按钮样式复活 */
-        button { padding: 10px 20px; border: none; background: #0071e3; color: #fff; border-radius: 8px; cursor: pointer; font-size: 14px; flex-shrink: 0; font-weight: 500; }
-        button:active { background: #005bb5; }
-        .btn-danger { background: #ff3b30; }
+        /* ================= 【核心底层改变】透明文件上传胶囊 ================= */
+        .upload-wrapper {
+            position: relative;
+            display: inline-block;
+            overflow: hidden;
+        }
+
+        /* 底层的精美外观按钮（恢复你最喜欢的视觉样式） */
+        .visible-btn { 
+            padding: 10px 20px; 
+            border: none; 
+            background: #0071e3; 
+            color: #fff; 
+            border-radius: 8px; 
+            font-size: 14px; 
+            font-weight: 500;
+            display: inline-block;
+            text-align: center;
+            pointer-events: none; /* 让点击穿透到最上面的 input */
+        }
+        .btn-danger { background: #ff3b30; pointer-events: auto; cursor: pointer; }
         .btn-danger:active { background: #ff453a; }
 
-        /* 主内容容器 */
+        /* 覆盖在按钮正上方的真实系统 input */
+        .hidden-file-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            font-size: 100px; /* 撑满整个格子 */
+            opacity: 0; /* 【底层关键】设为完全透明，但肉眼看不见，手指依然能百分百戳到它 */
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        /* ================= 主内容容器 ================= */
         .container { display: flex; gap: 20px; min-height: 0; flex: 1; height: calc(100% - 60px); position: relative; z-index: 1; }
         
-        /* 视频区域：采用相对定位，方便控制栏悬浮 */
+        /* 视频区域 */
         .video-section { 
             background: #000; 
             border-radius: 12px; 
@@ -45,37 +75,36 @@
         
         .placeholder { width: 100%; height: 100%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; min-height: 150px; background: #000; border-radius: 12px; }
         
-        /* ================= 核心修复：控制条悬浮贴近视频，绝不下移 ================= */
+        /* 控制栏：绝对定位，悬浮紧贴在视频底部 */
         .video-controls-bar {
             position: absolute;
             bottom: 0;
             left: 0;
             width: 100%;
-            background: rgba(28, 28, 30, 0.85); /* 半透明黑，更有质感 */
-            backdrop-filter: blur(10px); /* 苹果标志性的毛玻璃效果 */
+            background: rgba(28, 28, 30, 0.85); 
+            backdrop-filter: blur(10px); 
             -webkit-backdrop-filter: blur(10px);
             padding: 10px 15px;
             box-sizing: border-box;
             display: none; 
             align-items: center;
             gap: 15px;
-            z-index: 10;
+            z-index: 20;
             user-select: none;
         }
         
-        /* 核心修复：增大手指触控热区，且强制不准触发网页任何其他手势，解决拖动不流畅 */
+        /* 进度条触控热区，强制切断系统其余手势干扰 */
         .progress-wrapper {
             flex: 1;
             height: 30px;
             display: flex;
             align-items: center;
             cursor: pointer;
-            touch-action: none; /* 【极其关键】锁死原生的任何干扰手势，把100%算力留给拖拽 */
+            touch-action: none; 
         }
         
         .custom-progress-container { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.3); position: relative; border-radius: 2px; }
         .custom-progress-bar { height: 100%; width: 0%; background: #0071e3; border-radius: 2px; position: relative; }
-        /* 进度条上的白色小圆点 */
         .custom-progress-bar::after {
             content: ''; position: absolute; right: -7px; top: 50%; transform: translateY(-50%);
             width: 14px; height: 14px; background: #fff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.4);
@@ -83,7 +112,7 @@
 
         .time-display { color: #aeaeb2; font-size: 13px; font-family: Menlo, Monaco, monospace; white-space: nowrap; user-select: none; }
 
-        /* ================= 字幕列表区域 ================= */
+        /* 字幕列表区域 */
         .subtitle-section { display: flex; flex-direction: column; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 15px; box-sizing: border-box; }
         .search-bar { width: 100%; padding: 8px 12px; border: 1px solid #d2d2d7; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; font-size: 14px; flex-shrink: 0; }
         
@@ -96,7 +125,7 @@
         
         .hidden-by-search { display: none !important; }
 
-        /* ================= 响应式横竖屏 ================= */
+        /* 响应式布局 */
         @media (orientation: landscape) {
             .container { flex-direction: row; }
             .video-section { flex: 3; height: 100%; }
@@ -112,12 +141,17 @@
 <body>
 
     <div class="controls">
-        <button id="btnLoadVideo">导入新视频</button>
-        <button id="btnLoadSubtitle">导入新字幕</button>
-        <button id="btnClearSubtitle" class="btn-danger">清空字幕</button>
+        <div class="upload-wrapper">
+            <div class="visible-btn">导入新视频</div>
+            <input type="file" id="videoFileInput" accept="video/*" class="hidden-file-input">
+        </div>
         
-        <input type="file" id="videoFileInput" accept="video/*" style="display: none; pointer-events: none;">
-        <input type="file" id="subtitleFileInput" accept=".srt,.vtt,.txt" style="display: none; pointer-events: none;">
+        <div class="upload-wrapper">
+            <div class="visible-btn">导入新字幕</div>
+            <input type="file" id="subtitleFileInput" accept=".srt,.vtt,.txt" class="hidden-file-input">
+        </div>
+        
+        <button id="btnClearSubtitle" class="visible-btn btn-danger">清空字幕</button>
     </div>
 
     <div class="container">
@@ -235,15 +269,7 @@
             lastActiveIndex = currentActiveIndex;
         }
 
-        // 按钮高级点击穿透绑定，确保 iPad 稳定响应
-        function setupBtn(btnId, inputId) {
-            const handler = (e) => { e.preventDefault(); document.getElementById(inputId).click(); };
-            document.getElementById(btnId).addEventListener('click', handler);
-            document.getElementById(btnId).addEventListener('touchstart', handler);
-        }
-        setupBtn('btnLoadVideo', 'videoFileInput');
-        setupBtn('btnLoadSubtitle', 'subtitleFileInput');
-
+        // ================= 【核心底层改变】完全废除任何中间 JS 拦截代码 =================
         document.getElementById('videoFileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -296,7 +322,7 @@
 
         video.addEventListener('click', () => video.paused ? video.play().catch(()=>{}) : video.pause());
 
-        // ================= 触控拖拽算法（加固硬件不分心手势） =================
+        // ================= 极其顺滑的进度条触控拖拽 =================
         const progressWrapper = document.getElementById('progressWrapper');
         function setProgressByX(clientX) {
             if (!video.duration) return;
