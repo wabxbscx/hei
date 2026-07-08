@@ -21,14 +21,12 @@
             z-index: 999; 
         }
         
-        /* 透明文件上传胶囊 */
         .upload-wrapper {
             position: relative;
             display: inline-block;
             overflow: hidden;
         }
 
-        /* 底层的精美外观按钮 */
         .visible-btn { 
             padding: 10px 20px; 
             border: none; 
@@ -44,7 +42,6 @@
         .btn-danger { background: #ff3b30; pointer-events: auto; cursor: pointer; }
         .btn-danger:active { background: #ff453a; }
 
-        /* 覆盖在按钮正上方的真实系统 input */
         .hidden-file-input {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             font-size: 100px; opacity: 0; cursor: pointer; z-index: 10;
@@ -83,7 +80,7 @@
         .play-pause-btn svg { width: 18px; height: 18px; fill: #ffffff; transition: transform 0.1s ease; }
         .play-pause-btn:active svg { transform: scale(0.85); }
         
-        /* 进度条触控热区（扩展物理交互边界，专门贴合 iPad 指针） */
+        /* 进度条触控热区 */
         .progress-wrapper {
             flex: 1; height: 34px; display: flex; align-items: center; cursor: pointer;
             touch-action: none; position: relative;
@@ -92,7 +89,6 @@
         
         .custom-progress-container { width: 100%; height: 5px; background: rgba(255, 255, 255, 0.25); position: relative; border-radius: 3px; pointer-events: none; }
         .custom-progress-bar { height: 100%; width: 0%; background: #0071e3; border-radius: 3px; position: relative; will-change: width; }
-        /* 进度条滑块 */
         .custom-progress-bar::after {
             content: ''; position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
             width: 16px; height: 16px; background: #fff; border-radius: 50%; 
@@ -179,7 +175,7 @@
         let currentVideoName = ''; 
         let isWaitingForPad = false; 
         
-        // 核心状态机变量
+        // 核心状态控制
         let isDragging = false;       
         let UISelectedTime = 0;       
 
@@ -201,7 +197,6 @@
             return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         }
 
-        // ================= 播放/暂停 核心状态同步 =================
         function updatePlayPauseUI() {
             if (video.paused) {
                 playIcon.style.display = 'block';
@@ -220,7 +215,6 @@
         video.addEventListener('play', updatePlayPauseUI);
         video.addEventListener('pause', updatePlayPauseUI);
 
-        // ================= 【硬件级指针】核心进度算法 =================
         function computeTimeFromX(clientX) {
             if (!video.duration) return 0;
             const rect = progressContainer.getBoundingClientRect();
@@ -238,14 +232,10 @@
             timeDisplay.textContent = `${formatTimeDisplay(targetTime)} / ${formatTimeDisplay(dur)}`;
         }
 
-        // 强行捕获硬件指针（强力穿透 iOS 防误触死区）
         function handlePointerDown(e) {
             if (!video.duration) return;
             isDragging = true;
-            
-            // 锁定当前指针，使微小滑动即便超出进度条物理边界也能全量捕获
             progressWrapper.setPointerCapture(e.pointerId);
-            
             UISelectedTime = computeTimeFromX(e.clientX);
             renderUIProgress(UISelectedTime);
         }
@@ -256,25 +246,30 @@
             renderUIProgress(UISelectedTime);
         }
 
+        // ================= 彻底重写：松手时的多重精确校准算法 =================
         function handlePointerUp(e) {
             if (!isDragging) return;
             isDragging = false;
-            
-            // 释放指针锁定
             progressWrapper.releasePointerCapture(e.pointerId);
             
-            // 最终位置强制做一次绝对校准
             UISelectedTime = computeTimeFromX(e.clientX);
             
             if (!isNaN(UISelectedTime)) {
-                // 【强制逐帧重渲染】打破 iPad 默认的关键帧吸附缓冲误差
+                // 1. 先进行初次强行赋值
                 video.currentTime = UISelectedTime; 
-                if (video.seekable && video.seekable.length > 0) {
-                    // 如果系统底层支持 fastSeek 精确对齐，则强制激发底层重解码
-                    if (!video.fastSeek) {
+
+                // 2. 异步步进器：针对 iPad 底层粗略吸附的对抗机制
+                // 在松手后的 50ms 和 150ms 连续进行两次高密度强制重对齐，打碎系统的吸附缓存
+                setTimeout(() => {
+                    video.currentTime = UISelectedTime;
+                }, 50);
+
+                setTimeout(() => {
+                    // 如果发现系统不听话发生了弹回偏离，进行最后的强行拉回
+                    if (Math.abs(video.currentTime - UISelectedTime) > 1) {
                         video.currentTime = UISelectedTime;
                     }
-                }
+                }, 150);
 
                 if (currentVideoName && video.duration > 0) {
                     localStorage.setItem('nail_history_' + currentVideoName, UISelectedTime.toString());
@@ -282,13 +277,11 @@
             }
         }
 
-        // 全面换装 Web Pointer API 监听管道（彻底摒弃 touch 和 mouse 事件）
         progressWrapper.addEventListener('pointerdown', handlePointerDown);
         progressWrapper.addEventListener('pointermove', handlePointerMove);
         progressWrapper.addEventListener('pointerup', handlePointerUp);
         progressWrapper.addEventListener('pointercancel', handlePointerUp);
 
-        // 正常播放过程中的时间流逝
         video.addEventListener('timeupdate', () => {
             const ct = video.currentTime, dur = video.duration || 0;
             if (!isDragging) {
@@ -306,7 +299,38 @@
             }
         });
 
-        // ================= 其余传统核心功能 =================
+        // ================= 字幕点击独立管道（双重防弹回机制） =================
+        function seekToSubtitle(index) {
+            if (index < 0 || index >= subtitles.length) return;
+            // 提前 0.1 秒切入，留足语音气流缓冲
+            const seekTime = Math.max(0, subtitles[index].start - 0.1);
+            currentActiveIndex = index;
+            updateSubtitleHighlight();
+            
+            if (!video.paused) video.pause();
+            isWaitingForPad = true; 
+            
+            // 强力重写：连续强制灌入目标时间，阻止 iPad 弹回上一个十几秒的关键帧
+            video.currentTime = seekTime;
+            
+            let fixCount = 0;
+            const forceFixInterval = setInterval(() => {
+                video.currentTime = seekTime;
+                fixCount++;
+                if (fixCount > 3) clearInterval(forceFixInterval);
+            }, 40);
+
+            const onReady = () => {
+                setTimeout(() => { 
+                    video.currentTime = seekTime; // 播放前最后一次对齐
+                    video.play().catch(()=>{}); 
+                    isWaitingForPad = false; 
+                }, 100);
+                video.removeEventListener('seeked', onReady);
+            };
+            video.addEventListener('seeked', onReady);
+        }
+
         function parseTimecode(tc) {
             const match = tc.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
             if (!match) return null;
@@ -350,22 +374,6 @@
                 sub.element = el;
             });
             document.getElementById('emptySubtitleState').style.display = subtitles.length ? 'none' : 'flex';
-        }
-
-        function seekToSubtitle(index) {
-            if (index < 0 || index >= subtitles.length) return;
-            const seekTime = Math.max(0, subtitles[index].start - 0.1);
-            currentActiveIndex = index;
-            updateSubtitleHighlight();
-            if (!video.paused) video.pause();
-            isWaitingForPad = true; 
-            video.currentTime = seekTime;
-
-            const onReady = () => {
-                setTimeout(() => { video.play().catch(()=>{}); isWaitingForPad = false; }, 80);
-                video.removeEventListener('seeked', onReady);
-            };
-            video.addEventListener('seeked', onReady);
         }
 
         function updateSubtitleHighlight() {
