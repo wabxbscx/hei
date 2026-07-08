@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>奶龙大学习</title>
+    <title>iPad 字幕学习器 - 状态反转丝滑版</title>
     <style>
         /* ================= 基础布局重置 ================= */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -175,7 +175,6 @@
         let currentVideoName = ''; 
         let isWaitingForPad = false; 
         
-        // 核心状态控制
         let isDragging = false;       
         let UISelectedTime = 0;       
 
@@ -246,7 +245,7 @@
             renderUIProgress(UISelectedTime);
         }
 
-        // ================= 彻底重写：松手时的多重精确校准算法 =================
+        // ================= 【反转破局逻辑】进度条彻底服从系统真实反馈 =================
         function handlePointerUp(e) {
             if (!isDragging) return;
             isDragging = false;
@@ -255,25 +254,19 @@
             UISelectedTime = computeTimeFromX(e.clientX);
             
             if (!isNaN(UISelectedTime)) {
-                // 1. 先进行初次强行赋值
+                // 1. 将意向时间交给系统
                 video.currentTime = UISelectedTime; 
 
-                // 2. 异步步进器：针对 iPad 底层粗略吸附的对抗机制
-                // 在松手后的 50ms 和 150ms 连续进行两次高密度强制重对齐，打碎系统的吸附缓存
-                setTimeout(() => {
-                    video.currentTime = UISelectedTime;
-                }, 50);
-
-                setTimeout(() => {
-                    // 如果发现系统不听话发生了弹回偏离，进行最后的强行拉回
-                    if (Math.abs(video.currentTime - UISelectedTime) > 1) {
-                        video.currentTime = UISelectedTime;
+                // 2. 核心反转：不再死扛，直接监听系统跳转完毕的最终事件
+                const syncBack = () => {
+                    // 获取 iPad 系统底层真正落脚的物理时间，强行重刷进度条UI
+                    renderUIProgress(video.currentTime);
+                    if (currentVideoName && video.duration > 0) {
+                        localStorage.setItem('nail_history_' + currentVideoName, video.currentTime.toString());
                     }
-                }, 150);
-
-                if (currentVideoName && video.duration > 0) {
-                    localStorage.setItem('nail_history_' + currentVideoName, UISelectedTime.toString());
-                }
+                    video.removeEventListener('seeked', syncBack);
+                };
+                video.addEventListener('seeked', syncBack);
             }
         }
 
@@ -282,8 +275,10 @@
         progressWrapper.addEventListener('pointerup', handlePointerUp);
         progressWrapper.addEventListener('pointercancel', handlePointerUp);
 
+        // 系统播放时的常规更新
         video.addEventListener('timeupdate', () => {
             const ct = video.currentTime, dur = video.duration || 0;
+            // 只要手指没在拉，进度条就100%忠实地跟随系统的真实时间走
             if (!isDragging) {
                 renderUIProgress(ct);
                 if (currentVideoName && dur > 0 && !isWaitingForPad) {
@@ -299,33 +294,24 @@
             }
         });
 
-        // ================= 字幕点击独立管道（双重防弹回机制） =================
+        // 字幕点击同样采用系统落脚反刷逻辑
         function seekToSubtitle(index) {
             if (index < 0 || index >= subtitles.length) return;
-            // 提前 0.1 秒切入，留足语音气流缓冲
             const seekTime = Math.max(0, subtitles[index].start - 0.1);
             currentActiveIndex = index;
             updateSubtitleHighlight();
             
             if (!video.paused) video.pause();
             isWaitingForPad = true; 
-            
-            // 强力重写：连续强制灌入目标时间，阻止 iPad 弹回上一个十几秒的关键帧
             video.currentTime = seekTime;
-            
-            let fixCount = 0;
-            const forceFixInterval = setInterval(() => {
-                video.currentTime = seekTime;
-                fixCount++;
-                if (fixCount > 3) clearInterval(forceFixInterval);
-            }, 40);
 
             const onReady = () => {
+                // 跳转完成后，进度条立即反向对齐系统当前帧
+                renderUIProgress(video.currentTime);
                 setTimeout(() => { 
-                    video.currentTime = seekTime; // 播放前最后一次对齐
                     video.play().catch(()=>{}); 
                     isWaitingForPad = false; 
-                }, 100);
+                }, 80);
                 video.removeEventListener('seeked', onReady);
             };
             video.addEventListener('seeked', onReady);
