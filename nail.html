@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>nail</title>
+    <style>
+        body { margin: 0; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f7; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
+        .controls { margin-bottom: 15px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .container { display: flex; gap: 20px; min-height: 0; flex: 1; }
+        
+        video { width: 100%; height: 100%; object-fit: contain; }
+        .search-bar { width: 100%; padding: 8px 12px; border: 1px solid #d2d2d7; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; font-size: 14px; }
+        .subtitle-list { flex: 1; overflow-y: auto; border: 1px solid #e5e5ea; border-radius: 8px; padding: 5px; -webkit-overflow-scrolling: touch; }
+        
+        .subtitle-item { padding: 10px; border-bottom: 1px solid #f2f2f7; cursor: pointer; display: flex; flex-direction: column; gap: 4px; border-radius: 6px; transition: background 0.2s; -webkit-tap-highlight-color: transparent; }
+        .subtitle-item:hover { background: #f5f5f7; }
+        .subtitle-item.active { background: #e8f2ff; color: #0066cc; font-weight: bold; }
+        .time-badge { color: #86868b; font-size: 11px; white-space: nowrap; align-self: flex-start; }
+        .text { font-size: 13px; line-height: 1.4; word-break: break-all; }
+        
+        .hidden-by-search { display: none !important; }
+        .placeholder { color: #fff; text-align: center; font-size: 16px; padding: 0 20px; }
+        button { padding: 8px 16px; border: none; background: #0071e3; color: #fff; border-radius: 8px; cursor: pointer; font-size: 14px; }
+        button:hover { background: #0077ed; }
+        .btn-danger { background: #ff3b30; }
+        .btn-danger:hover { background: #ff453a; }
+
+        /* =================【核心修复：横屏与竖屏自适应布局】================= */
+        
+        /* 默认：横屏（空间足够，左右分栏，视频 75% : 字幕 25%） */
+        @media (orientation: landscape) {
+            .container { flex-direction: row; }
+            .video-section { flex: 3; display: flex; flex-direction: column; background: #000; border-radius: 12px; overflow: hidden; justify-content: center; position: relative; }
+            .subtitle-section { flex: 1; display: flex; flex-direction: column; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 15px; box-sizing: border-box; z-index: 10; }
+        }
+
+        /* 触发：竖屏（上视频、下字幕。视频锁定标准电脑屏幕 16:9 比例铺满） */
+        @media (orientation: portrait) {
+            .container { flex-direction: column; }
+            .video-section { 
+                width: 100%; 
+                aspect-ratio: 16 / 9; /* 强行锁定 16:9 电脑屏幕比例铺满，不留黑边 */
+                background: #000; 
+                border-radius: 12px; 
+                overflow: hidden; 
+                display: flex;
+                flex-direction: column;
+                justify-content: center; 
+                position: relative;
+                flex-shrink: 0; /* 防止视频被下方挤压变形 */
+            }
+            .subtitle-section { 
+                flex: 1; /* 吃满垂直方向剩下的所有空间 */
+                display: flex; 
+                flex-direction: column; 
+                background: #fff; 
+                border-radius: 12px; 
+                box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+                padding: 15px; 
+                box-sizing: border-box; 
+                min-height: 0; /* 允许内部列表正常滚动 */
+            }
+        }
+
+        /* 干掉 iPad 弹出控件 */
+        video::-webkit-media-controls-enclosure { display: none !important; }
+        video::-webkit-media-controls { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <button id="btnLoadVideo">导入新视频</button>
+        <button id="btnLoadSubtitle">导入新字幕</button>
+        <button id="btnClearSubtitle" class="btn-danger">清空字幕</button>
+        <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
+        <input type="file" id="subtitleFileInput" accept=".srt,.vtt,.txt" style="display: none;">
+    </div>
+
+    <div class="container">
+        <div class="video-section">
+            <div id="videoPlaceholder" class="placeholder">请导入视频</div>
+            <video id="localVideo"></video> 
+        </div>
+        
+        <div class="subtitle-section">
+            <input type="text" id="subtitleSearch" class="search-bar" placeholder="搜索字幕...">
+            <div id="subtitleList" class="subtitle-list">
+                <div id="emptySubtitleState" style="text-align: center; color: #86868b; padding-top: 40px;">暂无字幕</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let subtitles = [];
+        let currentActiveIndex = -1;
+        let lastActiveIndex = -1; 
+        let searchQuery = '';
+        let currentVideoName = ''; 
+        let isWaitingForPad = false; 
+
+        function formatTimeShort(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function parseTimecode(tc) {
+            const match = tc.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
+            if (!match) return null;
+            return parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]) + parseInt(match[4]) / 1000;
+        }
+
+        function parseSubtitles(content) {
+            const lines = content.split(/\r?\n/);
+            const result = [];
+            let i = 0;
+            const isVTT = lines[0] && lines[0].trim().toUpperCase() === 'WEBVTT';
+            if (isVTT) i = 1;
+            while (i < lines.length) {
+                while (i < lines.length && lines[i].trim() === '') i++;
+                if (i >= lines.length) break;
+                const line1 = lines[i].trim();
+                if (/^\d+$/.test(line1) && !isVTT) { i++; if (i >= lines.length) break; }
+                const timeLine = lines[i].trim();
+                const timeMatch = timeLine.match(/(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/);
+                if (!timeMatch) { i++; continue; }
+                const start = parseTimecode(timeMatch[1]);
+                const end = parseTimecode(timeMatch[2]);
+                if (start === null || end === null) { i++; continue; }
+                i++;
+                const textLines = [];
+                while (i < lines.length && lines[i].trim() !== '') { textLines.push(lines[i].trim()); i++; }
+                const text = textLines.join(' ').trim();
+                if (text) result.push({ start, end, text });
+            }
+            result.sort((a, b) => a.start - b.start);
+            return result;
+        }
+
+        function loadSubtitles(arr) {
+            subtitles = arr.map((item, idx) => ({ id: idx, start: item.start, end: item.end, text: item.text, element: null }));
+            lastActiveIndex = -1; 
+            currentActiveIndex = -1;
+            isWaitingForPad = false;
+            renderSubtitleList();
+            updateSubtitleHighlight();
+        }
+
+        function renderSubtitleList() {
+            const subtitleList = document.getElementById('subtitleList');
+            subtitleList.innerHTML = '';
+            subtitles.forEach((sub, idx) => {
+                const el = document.createElement('div');
+                el.className = 'subtitle-item';
+                el.dataset.index = idx;
+                el.innerHTML = `<span class="time-badge">${formatTimeShort(sub.start)}</span><span class="text">${escapeHtml(sub.text)}</span>`;
+                el.addEventListener('click', () => seekToSubtitle(idx));
+                subtitleList.appendChild(el);
+                sub.element = el;
+            });
+            document.getElementById('emptySubtitleState').style.display = subtitles.length ? 'none' : 'flex';
+            applySearchFilter();
+        }
+
+        function applySearchFilter() {
+            const q = searchQuery.toLowerCase().trim();
+            subtitles.forEach(sub => {
+                if (!sub.element) return;
+                sub.element.classList.toggle('hidden-by-search', q && !sub.text.toLowerCase().includes(q));
+            });
+        }
+
+        function updateSubtitleHighlight() {
+            if (lastActiveIndex !== -1 && subtitles[lastActiveIndex] && subtitles[lastActiveIndex].element) {
+                subtitles[lastActiveIndex].element.classList.remove('active');
+            }
+            if (currentActiveIndex !== -1 && subtitles[currentActiveIndex] && subtitles[currentActiveIndex].element) {
+                const activeEl = subtitles[currentActiveIndex].element;
+                activeEl.classList.add('active');
+                activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+            lastActiveIndex = currentActiveIndex;
+        }
+
+        function seekToSubtitle(index) {
+            if (index < 0 || index >= subtitles.length) return;
+            const video = document.getElementById('localVideo');
+            const seekTime = Math.max(0, subtitles[index].start - 0.1);
+
+            currentActiveIndex = index;
+            updateSubtitleHighlight();
+
+            if (!video.paused) { video.pause(); }
+
+            isWaitingForPad = true; 
+            video.currentTime = seekTime;
+
+            const onReadyToPlay = () => {
+                setTimeout(() => {
+                    video.play().catch(() => {});
+                    isWaitingForPad = false;
+                }, 80);
+                video.removeEventListener('seeked', onReadyToPlay);
+                video.removeEventListener('canplay', onReadyToPlay);
+            };
+
+            video.addEventListener('seeked', onReadyToPlay);
+            video.addEventListener('canplay', onReadyToPlay);
+        }
+
+        function loadLocalVideo(file) {
+            const video = document.getElementById('localVideo');
+            const placeholder = document.getElementById('videoPlaceholder');
+            
+            currentVideoName = (file && file.name) ? file.name : 'ipad_standard_video'; 
+            video.src = URL.createObjectURL(file);
+            video.style.display = 'block';
+            placeholder.style.display = 'none';
+
+            const savedTime = localStorage.getItem('nail_history_' + currentVideoName);
+            if (savedTime) {
+                const targetTime = parseFloat(savedTime);
+                const onLoadedMetadata = () => {
+                    video.currentTime = targetTime;
+                    video.removeEventListener('loadedmetadata', onLoadedMetadata);
+                };
+                video.addEventListener('loadedmetadata', onLoadedMetadata);
+            }
+        }
+
+        document.getElementById('btnLoadVideo').addEventListener('click', () => document.getElementById('videoFileInput').click());
+        document.getElementById('videoFileInput').addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) loadLocalVideo(e.target.files[0]);
+            e.target.value = '';
+        });
+
+        document.getElementById('btnLoadSubtitle').addEventListener('click', () => document.getElementById('subtitleFileInput').click());
+        document.getElementById('subtitleFileInput').addEventListener('change', (e) => {
+            if (!e.target.files || !e.target.files[0]) return;
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const parsed = parseSubtitles(ev.target.result);
+                if (parsed.length === 0) return alert('未解析到有效字幕');
+                loadSubtitles(parsed);
+            };
+            reader.readAsText(file, 'UTF-8');
+            e.target.value = '';
+        });
+
+        document.getElementById('btnClearSubtitle').addEventListener('click', () => {
+            subtitles = [];
+            currentActiveIndex = -1;
+            lastActiveIndex = -1;
+            renderSubtitleList();
+            updateSubtitleHighlight();
+        });
+
+        document.getElementById('subtitleSearch').addEventListener('input', (e) => {
+            searchQuery = e.target.value;
+            applySearchFilter();
+        });
+
+        let lastSavedTime = 0;
+        document.getElementById('localVideo').addEventListener('timeupdate', () => {
+            if (isWaitingForPad) return;
+
+            const video = document.getElementById('localVideo');
+            const ct = video.currentTime;
+
+            if (currentVideoName && Math.abs(ct - lastSavedTime) > 1) {
+                localStorage.setItem('nail_history_' + currentVideoName, ct.toString());
+                lastSavedTime = ct;
+            }
+
+            for (let i = subtitles.length - 1; i >= 0; i--) {
+                if (ct >= subtitles[i].start && ct <= subtitles[i].end) {
+                    if (currentActiveIndex !== i) { 
+                        currentActiveIndex = i; 
+                        updateSubtitleHighlight(); 
+                    }
+                    return;
+                }
+            }
+        });
+
+        document.getElementById('localVideo').addEventListener('click', () => {
+            const video = document.getElementById('localVideo');
+            video.paused ? video.play() : video.pause();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            const video = document.getElementById('localVideo');
+            if (e.code === 'Space') { e.preventDefault(); video.paused ? video.play() : video.pause(); }
+            if (e.code === 'ArrowRight') { e.preventDefault(); video.currentTime = Math.min(video.duration, video.currentTime + 5); }
+            if (e.code === 'ArrowLeft') { e.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 5); }
+        });
+    </script>
+</body>
+</html>
