@@ -31,34 +31,47 @@
         .btn-danger { background: #ff3b30; }
         .btn-danger:hover { background: #ff453a; }
 
-        /* =================【控制条 & 时间显示区完美保留】================= */
+        /* 控制条 & 时间显示区 */
         .video-controls-bar {
             width: 100%;
             background: #1c1c1e;
             padding: 8px 15px;
             box-sizing: border-box;
-            display: none; /* 导入视频后通过JS控制显示为 flex */
+            display: none; 
             align-items: center;
             gap: 15px;
             border-bottom-left-radius: 12px;
             border-bottom-right-radius: 12px;
             flex-shrink: 0;
+            user-select: none;
+        }
+        
+        /* 增加包裹层方便触控交互 */
+        .progress-wrapper {
+            flex: 1;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
         }
         
         .custom-progress-container {
-            flex: 1;
+            width: 100%;
             height: 4px;
             background: rgba(255, 255, 255, 0.3);
-            cursor: pointer;
             position: relative;
             border-radius: 2px;
             transition: height 0.1s ease;
         }
-        .custom-progress-container:hover, .custom-progress-container:active { height: 8px; }
+        .progress-wrapper:hover .custom-progress-container,
+        .progress-wrapper:active .custom-progress-container { height: 8px; }
+        
         .custom-progress-bar { height: 100%; width: 0%; background: #0071e3; border-radius: 2px; position: relative; }
+        
+        /* 触控圆点响应范围调整 */
         .custom-progress-bar::after {
-            content: ''; position: absolute; right: -5px; top: 50%; transform: translateY(-50%);
-            width: 10px; height: 10px; background: #fff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            content: ''; position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
+            width: 12px; height: 12px; background: #fff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
         .time-display {
@@ -121,8 +134,10 @@
             <div id="videoPlaceholder" class="placeholder">请导入视频</div>
             <video id="localVideo"></video> 
             <div id="videoControlsBar" class="video-controls-bar">
-                <div id="progressContainer" class="custom-progress-container">
-                    <div id="progressBar" class="custom-progress-bar"></div>
+                <div id="progressWrapper" class="progress-wrapper">
+                    <div id="progressContainer" class="custom-progress-container">
+                        <div id="progressBar" class="custom-progress-bar"></div>
+                    </div>
                 </div>
                 <div id="timeDisplay" class="time-display">00:00 / 00:00</div>
             </div>
@@ -143,6 +158,7 @@
         let searchQuery = '';
         let currentVideoName = ''; 
         let isWaitingForPad = false; 
+        let isDraggingProgress = false; // 是否正在拖动进度条
 
         function formatTimeDisplay(seconds) {
             if (isNaN(seconds)) return '00:00';
@@ -292,8 +308,6 @@
             video.src = URL.createObjectURL(file);
             video.style.display = 'block';
             placeholder.style.display = 'none';
-            
-            // 核心修复：确保在这里显示控制栏为 flex 布局
             ctrlBar.style.display = 'flex'; 
 
             const savedTime = localStorage.getItem('nail_history_' + currentVideoName);
@@ -347,13 +361,13 @@
             const ct = video.currentTime;
             const dur = video.duration;
 
-            // 恢复同步：更新时间文本
-            document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(ct)} / ${formatTimeDisplay(dur)}`;
-
-            // 恢复同步：更新自定义进度条长度
-            if (dur > 0) {
-                const percentage = (ct / dur) * 100;
-                document.getElementById('progressBar').style.width = percentage + '%';
+            // 拖拽时不通过视频本身更新时间文本和进度条位置，防止冲突扯皮
+            if (!isDraggingProgress) {
+                document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(ct)} / ${formatTimeDisplay(dur)}`;
+                if (dur > 0) {
+                    const percentage = (ct / dur) * 100;
+                    document.getElementById('progressBar').style.width = percentage + '%';
+                }
             }
 
             if (isWaitingForPad) return;
@@ -374,15 +388,60 @@
             }
         });
 
-        document.getElementById('progressContainer').addEventListener('click', (e) => {
-            const video = document.getElementById('localVideo');
-            if (!video.duration) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            const clickX = e.clientX - rect.left;
-            const width = rect.width;
-            const newTime = (clickX / width) * video.duration;
-            video.currentTime = newTime;
+        // =================【核心升级：支持点击 + iPad 触控丝滑拖拽】=================
+        const progressWrapper = document.getElementById('progressWrapper');
+        const videoElement = document.getElementById('localVideo');
+
+        function setProgressByX(clientX) {
+            if (!videoElement.duration) return;
+            const rect = document.getElementById('progressContainer').getBoundingClientRect();
+            let offsetX = clientX - rect.left;
+            if (offsetX < 0) offsetX = 0;
+            if (offsetX > rect.width) offsetX = rect.width;
+            
+            const percentage = offsetX / rect.width;
+            const newTime = percentage * videoElement.duration;
+            
+            // 实时预览进度条位置和数字时间
+            document.getElementById('progressBar').style.width = (percentage * 100) + '%';
+            document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(newTime)} / ${formatTimeDisplay(videoElement.duration)}`;
+            
+            return newTime;
+        }
+
+        // 1. 鼠标点击或手指轻触直接跳转
+        progressWrapper.addEventListener('click', (e) => {
+            if (isDraggingProgress) return; // 正在拖拽时交给拖拽处理
+            const newTime = setProgressByX(e.clientX);
+            if (newTime !== undefined) videoElement.currentTime = newTime;
         });
+
+        // 2. iPad 触控屏手指拖拽监听
+        progressWrapper.addEventListener('touchstart', (e) => {
+            isDraggingProgress = true;
+            setProgressByX(e.touches[0].clientX);
+        });
+
+        progressWrapper.addEventListener('touchmove', (e) => {
+            if (!isDraggingProgress) return;
+            e.preventDefault(); // 阻止滚动网页的默认行为
+            setProgressByX(e.touches[0].clientX);
+        });
+
+        progressWrapper.addEventListener('touchend', (e) => {
+            if (!isDraggingProgress) return;
+            isDraggingProgress = false;
+            // 抬起手指时，把最终计算出的位置真正赋给视频
+            const rect = document.getElementById('progressContainer').getBoundingClientRect();
+            let offsetX = e.changedTouches[0].clientX - rect.left;
+            if (offsetX < 0) offsetX = 0;
+            if (offsetX > rect.width) offsetX = rect.width;
+            
+            if (videoElement.duration) {
+                videoElement.currentTime = (offsetX / rect.width) * videoElement.duration;
+            }
+        });
+        // =========================================================================
 
         document.getElementById('localVideo').addEventListener('click', () => {
             const video = document.getElementById('localVideo');
