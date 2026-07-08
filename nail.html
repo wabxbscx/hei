@@ -63,7 +63,7 @@
         
         .placeholder { width: 100%; height: 100%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; min-height: 150px; background: #000; border-radius: 12px; }
         
-        /* ================= 全新重构：毛玻璃悬浮控制栏 ================= */
+        /* ================= 毛玻璃悬浮控制栏 ================= */
         .video-controls-bar {
             position: absolute; bottom: 0; left: 0; width: 100%;
             background: rgba(28, 28, 30, 0.88); 
@@ -73,24 +73,24 @@
             border-top: 1px solid rgba(255,255,255,0.05);
         }
         
-        /* 新增：进度条前方的播放/暂停状态按钮 */
+        /* 播放/暂停状态按钮 */
         .play-pause-btn {
             background: none; border: none; padding: 0; margin: 0;
             width: 28px; height: 28px;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer; flex-shrink: 0; outline: none;
         }
-        /* 用极其丝滑的 SVG 图标保持高保真视觉 */
         .play-pause-btn svg { width: 18px; height: 18px; fill: #ffffff; transition: transform 0.1s ease; }
         .play-pause-btn:active svg { transform: scale(0.85); }
         
-        /* 进度条触控热区（增大了物理触控面积，更好点） */
+        /* 进度条触控热区（扩展物理交互边界，专门贴合 iPad 指针） */
         .progress-wrapper {
             flex: 1; height: 34px; display: flex; align-items: center; cursor: pointer;
             touch-action: none; position: relative;
+            user-select: none; -webkit-user-select: none;
         }
         
-        .custom-progress-container { width: 100%; height: 5px; background: rgba(255, 255, 255, 0.25); position: relative; border-radius: 3px; }
+        .custom-progress-container { width: 100%; height: 5px; background: rgba(255, 255, 255, 0.25); position: relative; border-radius: 3px; pointer-events: none; }
         .custom-progress-bar { height: 100%; width: 0%; background: #0071e3; border-radius: 3px; position: relative; will-change: width; }
         /* 进度条滑块 */
         .custom-progress-bar::after {
@@ -179,9 +179,9 @@
         let currentVideoName = ''; 
         let isWaitingForPad = false; 
         
-        // ================= 全新重构：控制栏状态机变量 =================
-        let isDragging = false;       // 标记当前是否正在抓着进度条
-        let UISelectedTime = 0;       // 拖拽时由手指/鼠标计算出的“临场实时目标时间”
+        // 核心状态机变量
+        let isDragging = false;       
+        let UISelectedTime = 0;       
 
         const video = document.getElementById('localVideo');
         const playPauseBtn = document.getElementById('playPauseBtn');
@@ -201,7 +201,7 @@
             return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         }
 
-        // ================= 播放/暂停 核心状态同步切换 =================
+        // ================= 播放/暂停 核心状态同步 =================
         function updatePlayPauseUI() {
             if (video.paused) {
                 playIcon.style.display = 'block';
@@ -213,19 +213,14 @@
         }
 
         playPauseBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // 阻止事件冒泡，防止触发视频中央的点击
-            if (video.paused) {
-                video.play().catch(()=>{});
-            } else {
-                video.pause();
-            }
+            e.stopPropagation(); 
+            if (video.paused) { video.play().catch(()=>{}); } else { video.pause(); }
         });
 
         video.addEventListener('play', updatePlayPauseUI);
         video.addEventListener('pause', updatePlayPauseUI);
 
-        // ================= 【纯净无死区】核心进度计算核心 =================
-        // 输入任何点击或滑动的 clientX，交出绝对纯净的视频对应时间点
+        // ================= 【硬件级指针】核心进度算法 =================
         function computeTimeFromX(clientX) {
             if (!video.duration) return 0;
             const rect = progressContainer.getBoundingClientRect();
@@ -235,7 +230,6 @@
             return (offsetX / rect.width) * video.duration;
         }
 
-        // 统一渲染界面外观（进度条长度、时间文字），不跟视频内核掐架
         function renderUIProgress(targetTime) {
             const dur = video.duration || 0;
             if (dur <= 0) return;
@@ -244,65 +238,58 @@
             timeDisplay.textContent = `${formatTimeDisplay(targetTime)} / ${formatTimeDisplay(dur)}`;
         }
 
-        // ================= 核心重写：三大触控输入管道 =================
-        
-        // 管道 1：手指戳下/鼠标点下
-        function handleDragStart(clientX) {
+        // 强行捕获硬件指针（强力穿透 iOS 防误触死区）
+        function handlePointerDown(e) {
             if (!video.duration) return;
             isDragging = true;
-            UISelectedTime = computeTimeFromX(clientX);
-            renderUIProgress(UISelectedTime); // UI立刻瞬移响应，绝不延迟一毫秒
-        }
-
-        // 管道 2：滑动中（不管长视频短视频，手指移到哪，UISelectedTime 就严格锁死到哪）
-        function handleDragMove(clientX) {
-            if (!isDragging) return;
-            UISelectedTime = computeTimeFromX(clientX);
+            
+            // 锁定当前指针，使微小滑动即便超出进度条物理边界也能全量捕获
+            progressWrapper.setPointerCapture(e.pointerId);
+            
+            UISelectedTime = computeTimeFromX(e.clientX);
             renderUIProgress(UISelectedTime);
         }
 
-        // 管道 3：手指抬起/鼠标松开（终极结算，不看系统变态坐标，只认最后高频锁定的时间）
-        function handleDragEnd() {
+        function handlePointerMove(e) {
+            if (!isDragging) return;
+            UISelectedTime = computeTimeFromX(e.clientX);
+            renderUIProgress(UISelectedTime);
+        }
+
+        function handlePointerUp(e) {
             if (!isDragging) return;
             isDragging = false;
+            
+            // 释放指针锁定
+            progressWrapper.releasePointerCapture(e.pointerId);
+            
+            // 最终位置强制做一次绝对校准
+            UISelectedTime = computeTimeFromX(e.clientX);
+            
             if (!isNaN(UISelectedTime)) {
-                video.currentTime = UISelectedTime; // 强制视频跨越时空跳转到指定位置
+                video.currentTime = UISelectedTime; 
                 if (currentVideoName && video.duration > 0) {
                     localStorage.setItem('nail_history_' + currentVideoName, UISelectedTime.toString());
                 }
             }
         }
 
-        // 绑定移动端 Touch 触控管道
-        progressWrapper.addEventListener('touchstart', (e) => { handleDragStart(e.touches[0].clientX); }, { passive: true });
-        progressWrapper.addEventListener('touchmove', (e) => { handleDragMove(e.touches[0].clientX); }, { passive: true });
-        progressWrapper.addEventListener('touchend', (e) => {
-            if (e.changedTouches && e.changedTouches.length > 0) {
-                UISelectedTime = computeTimeFromX(e.changedTouches[0].clientX);
-            }
-            handleDragEnd();
-        });
+        // 全面换装 Web Pointer API 监听管道（彻底摒弃 touch 和 mouse 事件）
+        progressWrapper.addEventListener('pointerdown', handlePointerDown);
+        progressWrapper.addEventListener('pointermove', handlePointerMove);
+        progressWrapper.addEventListener('pointerup', handlePointerUp);
+        progressWrapper.addEventListener('pointercancel', handlePointerUp);
 
-        // 绑定 PC 端鼠标管道（完美两端兼容）
-        progressWrapper.addEventListener('mousedown', (e) => { handleDragStart(e.clientX); });
-        window.addEventListener('mousemove', (e) => { if (isDragging) handleDragMove(e.clientX); });
-        window.addEventListener('mouseup', () => { if (isDragging) handleDragEnd(); });
-
-        // 视频正常播放过程中的更新机制
+        // 正常播放过程中的时间流逝
         video.addEventListener('timeupdate', () => {
             const ct = video.currentTime, dur = video.duration || 0;
-            
-            // 如果玩家正在拖拽进度条，要把进度条的控制权完全交还给手指，视频本身不准抢占UI
             if (!isDragging) {
                 renderUIProgress(ct);
                 if (currentVideoName && dur > 0 && !isWaitingForPad) {
                     localStorage.setItem('nail_history_' + currentVideoName, ct.toString());
                 }
             }
-
             if (isWaitingForPad) return;
-
-            // 字幕高亮跟踪
             for (let i = subtitles.length - 1; i >= 0; i--) {
                 if (ct >= subtitles[i].start && ct <= subtitles[i].end) {
                     if (currentActiveIndex !== i) { currentActiveIndex = i; updateSubtitleHighlight(); }
@@ -311,7 +298,7 @@
             }
         });
 
-        // ================= 其余传统核心功能（字幕解析、历史记忆等） =================
+        // ================= 其余传统核心功能 =================
         function parseTimecode(tc) {
             const match = tc.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
             if (!match) return null;
@@ -418,7 +405,6 @@
             subtitles.forEach(sub => { if (sub.element) sub.element.classList.toggle('hidden-by-search', q && !sub.text.toLowerCase().includes(q)); });
         });
 
-        // 点击视频中心切换播放状态
         video.addEventListener('click', () => video.paused ? video.play().catch(()=>{}) : video.pause());
     </script>
 </body>
