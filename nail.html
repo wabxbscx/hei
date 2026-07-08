@@ -5,357 +5,322 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>奶龙大学习</title>
     <style>
-        /* ================= 1. 基础重置与防溢出布局 ================= */
+        /* ================= 基础布局重置 ================= */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body, html { margin: 0; padding: 0; width: 100%; height: 100vh; background-color: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow: hidden; }
-        body { display: flex; flex-direction: column; padding: 15px; }
-
-        /* ================= 2. 【核心底层改变】纯 HTML 按钮伪装 ================= */
-        .top-controls {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 15px;
-            flex-shrink: 0;
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+        body { padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
+        
+        /* 顶部按钮控制区 */
+        .controls { 
+            margin-bottom: 15px; 
+            display: flex; 
+            gap: 10px; 
+            flex-wrap: wrap; 
+            flex-shrink: 0; 
+            position: relative;
+            z-index: 999; 
         }
         
-        /* 彻底放弃传统 button，直接让系统 input 站到最前线 */
-        .native-file-input {
-            font-size: 14px;
-            width: auto;
-            max-width: 140px;
-            color: #1d1d1f;
-        }
+        /* 精美按钮样式复活 */
+        button { padding: 10px 20px; border: none; background: #0071e3; color: #fff; border-radius: 8px; cursor: pointer; font-size: 14px; flex-shrink: 0; font-weight: 500; }
+        button:active { background: #005bb5; }
+        .btn-danger { background: #ff3b30; }
+        .btn-danger:active { background: #ff453a; }
+
+        /* 主内容容器 */
+        .container { display: flex; gap: 20px; min-height: 0; flex: 1; height: calc(100% - 60px); position: relative; z-index: 1; }
         
-        /* 针对 WebKit (iPad Safari) 核心定制：把原生选择按钮直接美化成苹果标准按钮 */
-        .native-file-input::-webkit-file-selector-button {
-            padding: 12px 18px;
-            font-size: 14px;
-            font-weight: 500;
-            color: #ffffff;
-            background-color: #0071e3;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            margin-right: 8px;
-            transition: background 0.15s;
-        }
-        .native-file-input::-webkit-file-selector-button:active {
-            background-color: #005bb5;
-        }
-
-        /* 独立清空按钮保持纯原生响应 */
-        .native-btn-danger {
-            padding: 12px 18px;
-            font-size: 14px;
-            font-weight: 500;
-            color: #ffffff;
-            background-color: #ff3b30;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
-        .native-btn-danger:active { background-color: #c72c23; }
-
-        /* ================= 3. 主交互框架布局 ================= */
-        .main-container {
-            display: flex;
-            gap: 15px;
-            flex: 1;
-            min-height: 0;
-            width: 100%;
-        }
-
-        /* 视频容器 */
-        .video-wrapper {
-            background-color: #000000;
-            border-radius: 14px;
-            overflow: hidden;
+        /* 视频区域：采用相对定位，方便控制栏悬浮 */
+        .video-section { 
+            background: #000; 
+            border-radius: 12px; 
+            overflow: hidden; 
             display: flex;
             flex-direction: column;
+            justify-content: center; 
             position: relative;
         }
-        video {
-            width: 100%;
-            flex: 1;
-            background: #000;
-            object-fit: contain;
-            display: none; /* 没导视频前彻底隐藏 */
-        }
+        video { width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
         video::-webkit-media-controls { display: none !important; }
-
-        /* 默认大黑方块提示 */
-        .video-placeholder {
+        
+        .placeholder { width: 100%; height: 100%; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; min-height: 150px; background: #000; border-radius: 12px; }
+        
+        /* ================= 核心修复：控制条悬浮贴近视频，绝不下移 ================= */
+        .video-controls-bar {
             position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background-color: #000000;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            z-index: 2;
-        }
-
-        /* 自定义控制条 */
-        .custom-control-bar {
-            height: 48px;
-            background-color: #1c1c1e;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(28, 28, 30, 0.85); /* 半透明黑，更有质感 */
+            backdrop-filter: blur(10px); /* 苹果标志性的毛玻璃效果 */
+            -webkit-backdrop-filter: blur(10px);
+            padding: 10px 15px;
+            box-sizing: border-box;
             display: none; 
             align-items: center;
-            padding: 0 16px;
             gap: 15px;
+            z-index: 10;
+            user-select: none;
         }
-        .progress-hit-zone {
+        
+        /* 核心修复：增大手指触控热区，且强制不准触发网页任何其他手势，解决拖动不流畅 */
+        .progress-wrapper {
             flex: 1;
             height: 30px;
             display: flex;
             align-items: center;
             cursor: pointer;
+            touch-action: none; /* 【极其关键】锁死原生的任何干扰手势，把100%算力留给拖拽 */
         }
-        .progress-rail { width: 100%; height: 4px; background-color: rgba(255, 255, 255, 0.3); border-radius: 2px; }
-        .progress-fill { height: 100%; width: 0%; background-color: #0071e3; border-radius: 2px; position: relative; }
-        .progress-fill::after {
+        
+        .custom-progress-container { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.3); position: relative; border-radius: 2px; }
+        .custom-progress-bar { height: 100%; width: 0%; background: #0071e3; border-radius: 2px; position: relative; }
+        /* 进度条上的白色小圆点 */
+        .custom-progress-bar::after {
             content: ''; position: absolute; right: -7px; top: 50%; transform: translateY(-50%);
-            width: 14px; height: 14px; background-color: #ffffff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+            width: 14px; height: 14px; background: #fff; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.4);
         }
-        .time-label { color: #aeaeb2; font-size: 13px; font-family: Menlo, Monaco, monospace; white-space: nowrap; }
 
-        /* 字幕容器 */
-        .subtitle-wrapper {
-            background-color: #ffffff;
-            border-radius: 14px;
-            border: 1px solid #e5e5ea;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-            display: flex;
-            flex-direction: column;
-            padding: 15px;
-        }
-        .search-box {
-            width: 100%; padding: 10px 14px; border: 1px solid #d2d2d7; border-radius: 10px; font-size: 14px; margin-bottom: 12px; outline: none; flex-shrink: 0;
-        }
-        .search-box:focus { border-color: #0071e3; }
-        
-        .subtitle-scroll-area { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; position: relative; }
-        .subtitle-item { padding: 12px; border-bottom: 1px solid #f2f2f7; border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; margin-bottom: 2px; }
-        .subtitle-item.active { background-color: #e8f2ff; color: #0066cc; font-weight: 600; }
-        .item-time { font-size: 11px; color: #86868b; }
-        .item-text { font-size: 14px; line-height: 1.4; word-break: break-all; }
-        
-        .search-hidden { display: none !important; }
+        .time-display { color: #aeaeb2; font-size: 13px; font-family: Menlo, Monaco, monospace; white-space: nowrap; user-select: none; }
 
-        /* ================= 4. 彻底分离的屏幕响应式 ================= */
+        /* ================= 字幕列表区域 ================= */
+        .subtitle-section { display: flex; flex-direction: column; background: #fff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 15px; box-sizing: border-box; }
+        .search-bar { width: 100%; padding: 8px 12px; border: 1px solid #d2d2d7; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; font-size: 14px; flex-shrink: 0; }
+        
+        .subtitle-list { flex: 1; overflow-y: auto; border: 1px solid #e5e5ea; border-radius: 8px; padding: 5px; -webkit-overflow-scrolling: touch; position: relative; }
+        .subtitle-item { padding: 10px; border-bottom: 1px solid #f2f2f7; cursor: pointer; display: flex; flex-direction: column; gap: 4px; border-radius: 6px; transition: background 0.2s; }
+        .subtitle-item:hover { background: #f5f5f7; }
+        .subtitle-item.active { background: #e8f2ff; color: #0066cc; font-weight: bold; }
+        .time-badge { color: #86868b; font-size: 11px; white-space: nowrap; align-self: flex-start; }
+        .text { font-size: 13px; line-height: 1.4; word-break: break-all; }
+        
+        .hidden-by-search { display: none !important; }
+
+        /* ================= 响应式横竖屏 ================= */
         @media (orientation: landscape) {
-            .main-container { flex-direction: row; }
-            .video-wrapper { flex: 3; height: 100%; }
-            .subtitle-wrapper { flex: 1; height: 100%; min-width: 280px; }
+            .container { flex-direction: row; }
+            .video-section { flex: 3; height: 100%; }
+            .subtitle-section { flex: 1; height: 100%; min-width: 260px; }
         }
         @media (orientation: portrait) {
-            .main-container { flex-direction: column; }
-            .video-wrapper { width: 100%; aspect-ratio: 16 / 9; flex-shrink: 0; }
-            .subtitle-wrapper { flex: 1; width: 100%; min-height: 0; }
+            .container { flex-direction: column; }
+            .video-section { width: 100%; aspect-ratio: 16 / 9; flex-shrink: 0; }
+            .subtitle-section { flex: 1; min-height: 0; }
         }
     </style>
 </head>
 <body>
 
-    <div class="top-controls">
-        <input type="file" id="videoInput" accept="video/*" class="native-file-input">
-        <input type="file" id="subInput" accept=".srt,.vtt,.txt" class="native-file-input">
-        <button id="clearSubBtn" class="native-btn-danger">清空字幕</button>
+    <div class="controls">
+        <button id="btnLoadVideo">导入新视频</button>
+        <button id="btnLoadSubtitle">导入新字幕</button>
+        <button id="btnClearSubtitle" class="btn-danger">清空字幕</button>
+        
+        <input type="file" id="videoFileInput" accept="video/*" style="display: none; pointer-events: none;">
+        <input type="file" id="subtitleFileInput" accept=".srt,.vtt,.txt" style="display: none; pointer-events: none;">
     </div>
 
-    <div class="main-container">
-        <div class="video-section video-wrapper">
-            <div id="placeholder" class="video-placeholder">请在上方按钮选择视频和字幕</div>
-            <video id="mainVideo" preload="metadata" playsinline webkit-playsinline></video>
+    <div class="container">
+        <div class="video-section">
+            <div id="videoPlaceholder" class="placeholder">请导入视频</div>
+            <video id="localVideo" playsinline webkit-playsinline></video> 
             
-            <div id="controlBar" class="custom-control-bar">
-                <div id="progressZone" class="progress-hit-zone">
-                    <div class="progress-rail">
-                        <div id="progressFill" class="progress-fill"></div>
+            <div id="videoControlsBar" class="video-controls-bar">
+                <div id="progressWrapper" class="progress-wrapper">
+                    <div id="progressContainer" class="custom-progress-container">
+                        <div id="progressBar" class="custom-progress-bar"></div>
                     </div>
                 </div>
-                <div id="timeText" class="time-label">00:00 / 00:00</div>
+                <div id="timeDisplay" class="time-display">00:00 / 00:00</div>
             </div>
         </div>
-
-        <div class="subtitle-wrapper">
-            <input type="text" id="searchBox" class="search-box" placeholder="搜索过滤字幕内容...">
-            <div id="scrollArea" class="subtitle-scroll-area">
-                <div id="emptyState" style="text-align: center; color: #86868b; padding-top: 50px; font-size: 14px;">暂无字幕数据</div>
+        
+        <div class="subtitle-section">
+            <input type="text" id="subtitleSearch" class="search-bar" placeholder="搜索字幕...">
+            <div id="subtitleList" class="subtitle-list">
+                <div id="emptySubtitleState" style="text-align: center; color: #86868b; padding-top: 40px;">暂无字幕</div>
             </div>
         </div>
     </div>
 
     <script>
-        // ================= 数据和核心播放逻辑 =================
-        let subtitleData = [];
-        let activeIndex = -1;
-        let isDragging = false;
-        let videoName = '';
+        let subtitles = [];
+        let currentActiveIndex = -1;
+        let lastActiveIndex = -1; 
+        let searchQuery = '';
+        let currentVideoName = ''; 
+        let isWaitingForPad = false; 
+        let isDraggingProgress = false; 
 
-        const video = document.getElementById('mainVideo');
-        const placeholder = document.getElementById('placeholder');
-        const controlBar = document.getElementById('controlBar');
-        const progressFill = document.getElementById('progressFill');
-        const timeText = document.getElementById('timeText');
-        const scrollArea = document.getElementById('scrollArea');
-        const emptyState = document.getElementById('emptyState');
+        const video = document.getElementById('localVideo');
 
-        function formatTime(secs) {
-            if (isNaN(secs)) return '00:00';
-            const h = Math.floor(secs / 3600);
-            const m = Math.floor((secs % 3600) / 60);
-            const s = Math.floor(secs % 60);
-            const pad = (num) => String(num).padStart(2, '0');
-            return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+        function formatTimeDisplay(seconds) {
+            if (isNaN(seconds)) return '00:00';
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         }
 
-        function parseSRTorVTT(text) {
-            const lines = text.split(/\r?\n/);
-            const blocks = [];
+        function parseTimecode(tc) {
+            const match = tc.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
+            if (!match) return null;
+            return parseInt(match[1]) * 3600 + parseInt(match[2]) * 60 + parseInt(match[3]) + parseInt(match[4]) / 1000;
+        }
+
+        function parseSubtitles(content) {
+            const lines = content.split(/\r?\n/);
+            const result = [];
             let i = 0;
-            if (lines[0] && lines[0].trim().toUpperCase() === 'WEBVTT') i = 1;
+            const isVTT = lines[0] && lines[0].trim().toUpperCase() === 'WEBVTT';
+            if (isVTT) i = 1;
             while (i < lines.length) {
                 while (i < lines.length && lines[i].trim() === '') i++;
                 if (i >= lines.length) break;
-                if (/^\d+$/.test(lines[i].trim())) i++; 
-                if (i >= lines.length) break;
+                if (/^\d+$/.test(lines[i].trim()) && !isVTT) i++;
                 const timeLine = lines[i].trim();
-                const match = timeLine.match(/(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/);
-                if (!match) { i++; continue; }
-                const toSecs = (str) => {
-                    const parts = str.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
-                    return parts ? parseInt(parts[1])*3600 + parseInt(parts[2])*60 + parseInt(parts[3]) + parseInt(parts[4])/1000 : 0;
-                };
-                const start = toSecs(match[1]);
-                const end = toSecs(match[2]);
+                const timeMatch = timeLine.match(/(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/);
+                if (!timeMatch) { i++; continue; }
+                const start = parseTimecode(timeMatch[1]);
+                const end = parseTimecode(timeMatch[2]);
+                if (start === null || end === null) { i++; continue; }
                 i++;
-                const txtArr = [];
-                while (i < lines.length && lines[i].trim() !== '') { txtArr.push(lines[i].trim()); i++; }
-                if (txtArr.length > 0) blocks.push({ start, end, text: txtArr.join(' ') });
+                const textLines = [];
+                while (i < lines.length && lines[i].trim() !== '') { textLines.push(lines[i].trim()); i++; }
+                const text = textLines.join(' ').trim();
+                if (text) result.push({ start, end, text });
             }
-            return blocks.sort((a,b) => a.start - b.start);
+            return result.sort((a, b) => a.start - b.start);
         }
 
-        function renderSubtitles() {
-            scrollArea.innerHTML = '';
-            scrollArea.appendChild(emptyState);
-            if (subtitleData.length === 0) { emptyState.style.display = 'block'; return; }
-            emptyState.style.display = 'none';
-
-            subtitleData.forEach((item, idx) => {
-                const div = document.createElement('div');
-                div.className = 'subtitle-item';
-                div.id = `sub-item-${idx}`;
-                div.innerHTML = `<span class="item-time">${formatTime(item.start)}</span><span class="item-text">${item.text}</span>`;
-                div.addEventListener('click', () => {
-                    activeIndex = idx;
-                    highlightAndScroll();
-                    video.currentTime = item.start;
-                });
-                scrollArea.appendChild(div);
-                item.dom = div;
+        function renderSubtitleList() {
+            const subtitleList = document.getElementById('subtitleList');
+            subtitleList.innerHTML = '';
+            subtitles.forEach((sub, idx) => {
+                const el = document.createElement('div');
+                el.className = 'subtitle-item';
+                el.innerHTML = `<span class="time-badge">${formatTimeDisplay(sub.start)}</span><span class="text">${sub.text}</span>`;
+                el.addEventListener('click', () => seekToSubtitle(idx));
+                subtitleList.appendChild(el);
+                sub.element = el;
             });
+            document.getElementById('emptySubtitleState').style.display = subtitles.length ? 'none' : 'flex';
         }
 
-        function highlightAndScroll() {
-            subtitleData.forEach((item, idx) => { if (item.dom) item.dom.classList.toggle('active', idx === activeIndex); });
-            if (activeIndex !== -1 && subtitleData[activeIndex] && subtitleData[activeIndex].dom) {
-                const targetEl = subtitleData[activeIndex].dom;
-                const containerHeight = scrollArea.clientHeight;
-                scrollArea.scrollTo({ top: targetEl.offsetTop - (containerHeight / 2) + (targetEl.clientHeight / 2), behavior: 'smooth' });
-            }
-        }
+        function seekToSubtitle(index) {
+            if (index < 0 || index >= subtitles.length) return;
+            const seekTime = Math.max(0, subtitles[index].start - 0.1);
+            currentActiveIndex = index;
+            updateSubtitleHighlight();
+            if (!video.paused) video.pause();
+            isWaitingForPad = true; 
+            video.currentTime = seekTime;
 
-        // ================= 纯原生监听事件 =================
-        // 视频文件上传后，触发底层原生渲染
-        document.getElementById('videoInput').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            videoName = file.name;
-            video.src = URL.createObjectURL(file);
-            placeholder.style.display = 'none';
-            controlBar.style.display = 'flex';
-            video.style.display = 'block';
-
-            const history = localStorage.getItem('review_progress_' + videoName);
-            if (history) video.currentTime = parseFloat(history);
-        });
-
-        // 字幕文件上传后，触发底层原生渲染
-        document.getElementById('subInput').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-                subtitleData = parseSRTorVTT(evt.target.result);
-                if (subtitleData.length === 0) { alert('未能识别有效字幕格式！'); return; }
-                activeIndex = -1;
-                renderSubtitles();
+            const onReady = () => {
+                setTimeout(() => { video.play().catch(()=>{}); isWaitingForPad = false; }, 80);
+                video.removeEventListener('seeked', onReady);
             };
-            reader.readAsText(file, 'utf-8');
+            video.addEventListener('seeked', onReady);
+        }
+
+        function updateSubtitleHighlight() {
+            if (lastActiveIndex !== -1 && subtitles[lastActiveIndex]?.element) subtitles[lastActiveIndex].element.classList.remove('active');
+            if (currentActiveIndex !== -1 && subtitles[currentActiveIndex]?.element) {
+                const activeEl = subtitles[currentActiveIndex].element;
+                activeEl.classList.add('active');
+                const container = document.getElementById('subtitleList');
+                container.scrollTo({ top: activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2, behavior: 'smooth' });
+            }
+            lastActiveIndex = currentActiveIndex;
+        }
+
+        // 按钮高级点击穿透绑定，确保 iPad 稳定响应
+        function setupBtn(btnId, inputId) {
+            const handler = (e) => { e.preventDefault(); document.getElementById(inputId).click(); };
+            document.getElementById(btnId).addEventListener('click', handler);
+            document.getElementById(btnId).addEventListener('touchstart', handler);
+        }
+        setupBtn('btnLoadVideo', 'videoFileInput');
+        setupBtn('btnLoadSubtitle', 'subtitleFileInput');
+
+        document.getElementById('videoFileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            currentVideoName = file.name;
+            video.src = URL.createObjectURL(file);
+            video.style.display = 'block';
+            document.getElementById('videoPlaceholder').style.display = 'none';
+            document.getElementById('videoControlsBar').style.display = 'flex';
+
+            const savedTime = localStorage.getItem('nail_history_' + currentVideoName);
+            if (savedTime) {
+                const onMetadata = () => { video.currentTime = parseFloat(savedTime); video.removeEventListener('loadedmetadata', onMetadata); };
+                video.addEventListener('loadedmetadata', onMetadata);
+            }
         });
 
-        document.getElementById('clearSubBtn').addEventListener('click', () => {
-            subtitleData = []; activeIndex = -1; renderSubtitles();
+        document.getElementById('subtitleFileInput').addEventListener('change', (e) => {
+            if (!e.target.files[0]) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                subtitles = parseSubtitles(ev.target.result);
+                currentActiveIndex = -1; lastActiveIndex = -1;
+                renderSubtitleList();
+            };
+            reader.readAsText(e.target.files[0], 'UTF-8');
         });
 
-        document.getElementById('searchBox').addEventListener('input', (e) => {
-            const val = e.target.value.toLowerCase().trim();
-            subtitleData.forEach(item => {
-                if (item.dom) item.dom.classList.toggle('search-hidden', val !== '' && !item.text.toLowerCase().includes(val));
-            });
+        document.getElementById('btnClearSubtitle').addEventListener('click', () => { subtitles = []; renderSubtitleList(); });
+        document.getElementById('subtitleSearch').addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            subtitles.forEach(sub => { if (sub.element) sub.element.classList.toggle('hidden-by-search', q && !sub.text.toLowerCase().includes(q)); });
         });
 
         video.addEventListener('timeupdate', () => {
-            const ct = video.currentTime;
-            const dur = video.duration || 0;
-            if (!isDragging) {
-                timeText.textContent = `${formatTime(ct)} / ${formatTime(dur)}`;
-                if (dur > 0) progressFill.style.width = `${(ct / dur) * 100}%`;
+            const ct = video.currentTime, dur = video.duration || 0;
+            if (!isDraggingProgress) {
+                document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(ct)} / ${formatTimeDisplay(dur)}`;
+                if (dur > 0) document.getElementById('progressBar').style.width = (ct / dur) * 100 + '%';
             }
-            if (videoName && dur > 0) localStorage.setItem('review_progress_' + videoName, ct);
-            if (subtitleData.length > 0) {
-                let foundIdx = -1;
-                for (let i = 0; i < subtitleData.length; i++) {
-                    if (ct >= subtitleData[i].start && ct <= subtitleData[i].end) { foundIdx = i; break; }
+            if (isWaitingForPad) return;
+            if (currentVideoName && dur > 0) localStorage.setItem('nail_history_' + currentVideoName, ct.toString());
+
+            for (let i = subtitles.length - 1; i >= 0; i--) {
+                if (ct >= subtitles[i].start && ct <= subtitles[i].end) {
+                    if (currentActiveIndex !== i) { currentActiveIndex = i; updateSubtitleHighlight(); }
+                    break;
                 }
-                if (foundIdx !== -1 && foundIdx !== activeIndex) { activeIndex = foundIdx; highlightAndScroll(); }
             }
         });
 
-        video.addEventListener('click', () => { video.paused ? video.play().catch(()=>{}) : video.pause(); });
+        video.addEventListener('click', () => video.paused ? video.play().catch(()=>{}) : video.pause());
 
-        // ================= 进度条拖拽与点击（完美匹配 iPad） =================
-        const progressZone = document.getElementById('progressZone');
-        function handleProgressInteraction(clientX) {
+        // ================= 触控拖拽算法（加固硬件不分心手势） =================
+        const progressWrapper = document.getElementById('progressWrapper');
+        function setProgressByX(clientX) {
             if (!video.duration) return;
-            const rect = progressZone.getBoundingClientRect();
-            let x = clientX - rect.left;
-            if (x < 0) x = 0; if (x > rect.width) x = rect.width;
-            const pct = x / rect.width;
-            progressFill.style.width = `${pct * 100}%`;
-            timeText.textContent = `${formatTime(pct * video.duration)} / ${formatTime(video.duration)}`;
+            const rect = document.getElementById('progressContainer').getBoundingClientRect();
+            let offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+            const pct = offsetX / rect.width;
+            document.getElementById('progressBar').style.width = (pct * 100) + '%';
+            document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(pct * video.duration)} / ${formatTimeDisplay(video.duration)}`;
             return pct * video.duration;
         }
 
-        progressZone.addEventListener('click', (e) => {
-            if (isDragging) return;
-            const targetTime = handleProgressInteraction(e.clientX);
-            if (targetTime !== undefined) video.currentTime = targetTime;
+        progressWrapper.addEventListener('click', (e) => {
+            if (isDraggingProgress) return;
+            const t = setProgressByX(e.clientX);
+            if (t !== undefined) video.currentTime = t;
         });
-        progressZone.addEventListener('touchstart', (e) => { isDragging = true; handleProgressInteraction(e.touches[0].clientX); });
-        progressZone.addEventListener('touchmove', (e) => { if (!isDragging) return; handleProgressInteraction(e.touches[0].clientX); });
-        progressZone.addEventListener('touchend', (e) => {
-            if (!isDragging) return;
-            isDragging = false;
-            const rect = progressZone.getBoundingClientRect();
-            let x = e.changedTouches[0].clientX - rect.left;
-            if (x < 0) x = 0; if (x > rect.width) x = rect.width;
-            if (video.duration) video.currentTime = (x / rect.width) * video.duration;
+        progressWrapper.addEventListener('touchstart', (e) => { isDraggingProgress = true; setProgressByX(e.touches[0].clientX); });
+        progressWrapper.addEventListener('touchmove', (e) => { if (isDraggingProgress) setProgressByX(e.touches[0].clientX); });
+        progressWrapper.addEventListener('touchend', (e) => {
+            if (!isDraggingProgress) return;
+            isDraggingProgress = false;
+            const rect = document.getElementById('progressContainer').getBoundingClientRect();
+            let offsetX = Math.max(0, Math.min(e.changedTouches[0].clientX - rect.left, rect.width));
+            if (video.duration) video.currentTime = (offsetX / rect.width) * video.duration;
         });
     </script>
 </body>
