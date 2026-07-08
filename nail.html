@@ -267,7 +267,15 @@
             UISelectedTime = computeTimeFromX(e.clientX);
             
             if (!isNaN(UISelectedTime)) {
+                // 【强制逐帧重渲染】打破 iPad 默认的关键帧吸附缓冲误差
                 video.currentTime = UISelectedTime; 
+                if (video.seekable && video.seekable.length > 0) {
+                    // 如果系统底层支持 fastSeek 精确对齐，则强制激发底层重解码
+                    if (!video.fastSeek) {
+                        video.currentTime = UISelectedTime;
+                    }
+                }
+
                 if (currentVideoName && video.duration > 0) {
                     localStorage.setItem('nail_history_' + currentVideoName, UISelectedTime.toString());
                 }
