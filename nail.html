@@ -21,14 +21,14 @@
             z-index: 999; 
         }
         
-        /* ================= 【核心底层改变】透明文件上传胶囊 ================= */
+        /* 透明文件上传胶囊 */
         .upload-wrapper {
             position: relative;
             display: inline-block;
             overflow: hidden;
         }
 
-        /* 底层的精美外观按钮（恢复你最喜欢的视觉样式） */
+        /* 底层的精美外观按钮 */
         .visible-btn { 
             padding: 10px 20px; 
             border: none; 
@@ -39,36 +39,24 @@
             font-weight: 500;
             display: inline-block;
             text-align: center;
-            pointer-events: none; /* 让点击穿透到最上面的 input */
+            pointer-events: none; 
         }
         .btn-danger { background: #ff3b30; pointer-events: auto; cursor: pointer; }
         .btn-danger:active { background: #ff453a; }
 
         /* 覆盖在按钮正上方的真实系统 input */
         .hidden-file-input {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            font-size: 100px; /* 撑满整个格子 */
-            opacity: 0; /* 【底层关键】设为完全透明，但肉眼看不见，手指依然能百分百戳到它 */
-            cursor: pointer;
-            z-index: 10;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            font-size: 100px; opacity: 0; cursor: pointer; z-index: 10;
         }
 
-        /* ================= 主内容容器 ================= */
+        /* 主内容容器 */
         .container { display: flex; gap: 20px; min-height: 0; flex: 1; height: calc(100% - 60px); position: relative; z-index: 1; }
         
         /* 视频区域 */
         .video-section { 
-            background: #000; 
-            border-radius: 12px; 
-            overflow: hidden; 
-            display: flex;
-            flex-direction: column;
-            justify-content: center; 
-            position: relative;
+            background: #000; border-radius: 12px; overflow: hidden; 
+            display: flex; flex-direction: column; justify-content: center; position: relative;
         }
         video { width: 100%; height: 100%; object-fit: contain; background: #000; display: none; }
         video::-webkit-media-controls { display: none !important; }
@@ -77,29 +65,16 @@
         
         /* 控制栏：绝对定位，悬浮紧贴在视频底部 */
         .video-controls-bar {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
+            position: absolute; bottom: 0; left: 0; width: 100%;
             background: rgba(28, 28, 30, 0.85); 
-            backdrop-filter: blur(10px); 
-            -webkit-backdrop-filter: blur(10px);
-            padding: 10px 15px;
-            box-sizing: border-box;
-            display: none; 
-            align-items: center;
-            gap: 15px;
-            z-index: 20;
-            user-select: none;
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+            padding: 10px 15px; box-sizing: border-box;
+            display: none; align-items: center; gap: 15px; z-index: 20; user-select: none;
         }
         
         /* 进度条触控热区，强制切断系统其余手势干扰 */
         .progress-wrapper {
-            flex: 1;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
+            flex: 1; height: 30px; display: flex; align-items: center; cursor: pointer;
             touch-action: none; 
         }
         
@@ -269,7 +244,6 @@
             lastActiveIndex = currentActiveIndex;
         }
 
-        // ================= 【核心底层改变】完全废除任何中间 JS 拦截代码 =================
         document.getElementById('videoFileInput').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -322,31 +296,59 @@
 
         video.addEventListener('click', () => video.paused ? video.play().catch(()=>{}) : video.pause());
 
-        // ================= 极其顺滑的进度条触控拖拽 =================
+        // ================= 【核心重写】高精度无死区触控推进算法 =================
         const progressWrapper = document.getElementById('progressWrapper');
+        let currentPendingTime = 0;
+
         function setProgressByX(clientX) {
             if (!video.duration) return;
             const rect = document.getElementById('progressContainer').getBoundingClientRect();
-            let offsetX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+            // 采用精准的浮点数像素距离，绝不四舍五入
+            let offsetX = clientX - rect.left;
+            if (offsetX < 0) offsetX = 0;
+            if (offsetX > rect.width) offsetX = rect.width;
+            
             const pct = offsetX / rect.width;
+            // 极其关键：直接绕过底层节流，强制更新界面视觉，哪怕只挪动了 0.1 像素
             document.getElementById('progressBar').style.width = (pct * 100) + '%';
-            document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(pct * video.duration)} / ${formatTimeDisplay(video.duration)}`;
-            return pct * video.duration;
+            
+            currentPendingTime = pct * video.duration;
+            document.getElementById('timeDisplay').textContent = `${formatTimeDisplay(currentPendingTime)} / ${formatTimeDisplay(video.duration)}`;
+            return currentPendingTime;
         }
 
+        // 点击直接跳转
         progressWrapper.addEventListener('click', (e) => {
             if (isDraggingProgress) return;
             const t = setProgressByX(e.clientX);
-            if (t !== undefined) video.currentTime = t;
+            if (t !== undefined && !isNaN(t)) video.currentTime = t;
         });
-        progressWrapper.addEventListener('touchstart', (e) => { isDraggingProgress = true; setProgressByX(e.touches[0].clientX); });
-        progressWrapper.addEventListener('touchmove', (e) => { if (isDraggingProgress) setProgressByX(e.touches[0].clientX); });
+
+        // 触摸开始
+        progressWrapper.addEventListener('touchstart', (e) => {
+            isDraggingProgress = true;
+            setProgressByX(e.touches[0].clientX);
+        }, { passive: true });
+
+        // 触摸滑动：高频无阻碍捕获极其微小的数值变化
+        progressWrapper.addEventListener('touchmove', (e) => {
+            if (!isDraggingProgress) return;
+            setProgressByX(e.touches[0].clientX);
+        }, { passive: true });
+
+        // 触摸结束：终极校准。一两分钟的微调在这里会被强行灌入视频核心，强制画面刷新
         progressWrapper.addEventListener('touchend', (e) => {
             if (!isDraggingProgress) return;
             isDraggingProgress = false;
-            const rect = document.getElementById('progressContainer').getBoundingClientRect();
-            let offsetX = Math.max(0, Math.min(e.changedTouches[0].clientX - rect.left, rect.width));
-            if (video.duration) video.currentTime = (offsetX / rect.width) * video.duration;
+            
+            if (e.changedTouches && e.changedTouches.length > 0) {
+                setProgressByX(e.changedTouches[0].clientX);
+            }
+            
+            // 强行把最后算出来的微调时间塞给播放器内核
+            if (!isNaN(currentPendingTime)) {
+                video.currentTime = currentPendingTime; 
+            }
         });
     </script>
 </body>
