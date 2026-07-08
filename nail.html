@@ -3,7 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>奶龙大学习 · 最终版</title>
+    
+    <meta name="apple-mobile-web-app-title" content="奶龙大学习">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+   <link rel="apple-touch-icon" href="icon.png">
+    <title>奶龙大学习</title>
     <style>
         * {
             box-sizing: border-box;
@@ -19,7 +27,8 @@
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
         }
         body {
-            padding: 16px;
+            /* 适配 iOS 顶部的刘海/状态栏留白 */
+            padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 16px 16px;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -389,6 +398,7 @@
 </div>
 
 <script>
+    // 保持原有的 JavaScript 逻辑不变
     (function() {
         const video = document.getElementById('localVideo');
         const playPauseBtn = document.getElementById('playPauseBtn');
@@ -425,7 +435,6 @@
         let lastSaveTime = 0;
         let currentFontSize = 13;
 
-        // 安全存储
         function safeSetItem(key, value) {
             try { localStorage.setItem(key, value); } catch(e) {}
         }
@@ -640,10 +649,8 @@
             }
         });
 
-        // 动态视频比例
         function setVideoAspectRatio() {
             if (!video.videoWidth || !video.videoHeight) {
-                // fallback
                 const vs = document.querySelector('.video-section');
                 if (window.innerWidth < window.innerHeight) vs.style.aspectRatio = '16 / 9';
                 return;
@@ -661,7 +668,6 @@
             window._resizeTimer = setTimeout(setVideoAspectRatio, 150);
         });
 
-        // 视频错误处理
         video.addEventListener('error', ()=>{
             alert('视频加载失败，请检查文件格式或重新选择。');
             video.style.display = 'none';
@@ -669,7 +675,6 @@
             document.getElementById('videoControlsBar').style.display = 'none';
         });
 
-        // 导入视频
         document.getElementById('videoFileInput').addEventListener('change', e=>{
             const file = e.target.files[0];
             if(!file) return;
@@ -700,7 +705,6 @@
             }
         }
 
-        // 导入字幕
         document.getElementById('subtitleFileInput').addEventListener('change', e=>{
             const file = e.target.files[0];
             if(!file) return;
@@ -738,7 +742,6 @@
         speedSelect.addEventListener('change', ()=> video.playbackRate=parseFloat(speedSelect.value));
         volumeSlider.addEventListener('input', ()=> video.volume=volumeSlider.value);
 
-        // 全屏并自动隐藏字幕面板
         function onFullscreenChange() {
             if (document.fullscreenElement) {
                 subtitlePanel.style.display = 'none';
@@ -755,7 +758,6 @@
             }
         });
 
-        // AB循环
         function resetABLoop() {
             abLoopActive = false;
             loopStart = null;
@@ -779,7 +781,6 @@
             }
         });
 
-        // 字幕偏移
         subOffsetMinus.addEventListener('click', ()=>{
             subtitleOffset = Math.round((subtitleOffset - 0.1)*10)/10;
             updateOffsetDisplay();
@@ -790,7 +791,6 @@
         });
         updateOffsetDisplay();
 
-        // 字号
         function updateFontSize(delta){
             currentFontSize = Math.max(10, Math.min(24, currentFontSize+delta));
             document.querySelectorAll('.subtitle-item .text').forEach(el=> el.style.fontSize=currentFontSize+'px');
@@ -798,7 +798,6 @@
         fontSizeMinus.addEventListener('click', ()=>updateFontSize(-1));
         fontSizePlus.addEventListener('click', ()=>updateFontSize(1));
 
-        // 键盘快捷键
         document.addEventListener('keydown', e=>{
             if (e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT') return;
             if (e.code==='Space') {
@@ -813,7 +812,6 @@
             }
         });
 
-        // ---------- 拖拽导入 ----------
         const body = document.body;
         body.addEventListener('dragover', e=>{
             e.preventDefault();
@@ -828,7 +826,6 @@
             body.classList.remove('drag-over');
             const files = e.dataTransfer.files;
             if (!files.length) return;
-            // 处理第一个文件
             const file = files[0];
             if (file.type.startsWith('video/')) {
                 loadVideoFile(file);
